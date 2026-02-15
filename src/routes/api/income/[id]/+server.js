@@ -4,7 +4,7 @@ import { json } from '@sveltejs/kit';
 
 export const PUT = async ({ params, request }) => {
 	const { id } = params;
-	const { amount, income_reference, room_number } = await request.json();
+	const { amount, income_reference, room_number, date } = await request.json();
 	const numericAmount = Number(amount);
 	if (!numericAmount || numericAmount <= 0) {
 		return json({ error: 'Amount must be greater than zero.' }, { status: 400 });
@@ -19,6 +19,9 @@ export const PUT = async ({ params, request }) => {
 	if (!income_reference || !allowedReferences.includes(income_reference)) {
 		return json({ error: 'Income reference is required.' }, { status: 400 });
 	}
+	if (!date) {
+		return json({ error: 'Date is required.' }, { status: 400 });
+	}
 	const roomValue = room_number ? String(room_number).trim() : '';
 	if (roomValue) {
 		const exists = db.prepare('SELECT 1 FROM rooms WHERE room_number = ?').get(roomValue);
@@ -26,10 +29,11 @@ export const PUT = async ({ params, request }) => {
 			return json({ error: 'Invalid room number.' }, { status: 400 });
 		}
 	}
-	db.prepare('UPDATE income SET amount = ?, income_reference = ?, room_number = ? WHERE id = ?').run(
+	db.prepare('UPDATE income SET amount = ?, income_reference = ?, room_number = ?, date = ? WHERE id = ?').run(
 		numericAmount,
 		income_reference,
 		roomValue || null,
+		date,
 		id
 	);
 	return json({ success: true });

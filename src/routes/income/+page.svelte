@@ -9,6 +9,7 @@
 	let editAmounts = {};
 	let editReferences = {};
 	let editRooms = {};
+	let editDates = {};
 	let editingId = null;
 	let incomeTypeFilter = 'all';
 	let showReference = false;
@@ -56,6 +57,10 @@
 			}, {});
 			editRooms = incomeList.reduce((acc, item) => {
 				acc[item.id] = item.room_number || '';
+				return acc;
+			}, {});
+			editDates = incomeList.reduce((acc, item) => {
+				acc[item.id] = item.date;
 				return acc;
 			}, {});
 		}
@@ -115,7 +120,8 @@
 			body: JSON.stringify({
 				amount: editAmounts[id],
 				income_reference: editReferences[id],
-				room_number: editRooms[id] || null
+				room_number: editRooms[id] || null,
+				date: editDates[id]
 			})
 		});
 		if (res.ok) {
@@ -133,6 +139,7 @@
 		editAmounts[income.id] = income.amount;
 		editReferences[income.id] = income.income_reference;
 		editRooms[income.id] = income.room_number || '';
+		editDates[income.id] = income.date;
 	};
 
 	const cancelEdit = () => {
@@ -273,7 +280,13 @@
 			{:else}
 				{#each filteredIncome as income}
 					<tr>
-						<td>{formatShortDate(income.date)}</td>
+						<td>
+							{#if editingId === income.id}
+								<input type="date" bind:value={editDates[income.id]} />
+							{:else}
+								{formatShortDate(income.date)}
+							{/if}
+						</td>
 						<td>
 							{#if editingId === income.id}
 								<select bind:value={editRooms[income.id]}>

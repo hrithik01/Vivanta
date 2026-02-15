@@ -10,9 +10,11 @@
 	let expenseList = [];
 	let editAmounts = {};
 	let editTypes = {};
+	let editDates = {};
 	let editingId = null;
 	let expenseTypeFilter = 'all';
 	let showActions = false;
+	let showEmployee = false;
 	let message = '';
 	let form = {
 		expense_type_id: '',
@@ -57,6 +59,10 @@
 			}, {});
 			editTypes = expenseList.reduce((acc, item) => {
 				acc[item.id] = item.expense_type_id;
+				return acc;
+			}, {});
+			editDates = expenseList.reduce((acc, item) => {
+				acc[item.id] = item.date;
 				return acc;
 			}, {});
 		}
@@ -106,7 +112,11 @@
 		const res = await fetch(`/api/expenses/${id}`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ amount: editAmounts[id], expense_type_id: editTypes[id] })
+			body: JSON.stringify({
+				amount: editAmounts[id],
+				expense_type_id: editTypes[id],
+				date: editDates[id]
+			})
 		});
 		if (res.ok) {
 			message = 'Expense updated.';
@@ -122,6 +132,7 @@
 		editingId = expense.id;
 		editAmounts[expense.id] = expense.amount;
 		editTypes[expense.id] = expense.expense_type_id;
+		editDates[expense.id] = expense.date;
 	};
 
 	const cancelEdit = () => {
@@ -228,6 +239,10 @@
 			</select>
 		</label>
 		<label class="checkbox">
+			<input type="checkbox" bind:checked={showEmployee} />
+			<span>Show Employee</span>
+		</label>
+		<label class="checkbox">
 			<input type="checkbox" bind:checked={showActions} />
 			<span>Show Actions</span>
 		</label>
@@ -237,7 +252,9 @@
 			<tr>
 				<th>Date</th>
 				<th>Type</th>
-				<th>Employee</th>
+				{#if showEmployee}
+					<th>Employee</th>
+				{/if}
 				<th>Owner</th>
 				<th>Payment</th>
 				<th>Amount</th>
@@ -250,12 +267,27 @@
 		<tbody>
 			{#if filteredExpenses.length === 0}
 				<tr>
-					<td colspan={showActions ? 8 : 7} class="muted">No expenses recorded for this period.</td>
+					<td
+						colspan={
+							6 +
+							(showEmployee ? 1 : 0) +
+							(showActions ? 1 : 0)
+						}
+						class="muted"
+					>
+						No expenses recorded for this period.
+					</td>
 				</tr>
 			{:else}
 				{#each filteredExpenses as expense}
 					<tr>
-						<td>{formatShortDate(expense.date)}</td>
+						<td>
+							{#if editingId === expense.id}
+								<input type="date" bind:value={editDates[expense.id]} />
+							{:else}
+								{formatShortDate(expense.date)}
+							{/if}
+						</td>
 						<td>
 							{#if editingId === expense.id}
 								<select bind:value={editTypes[expense.id]}>
@@ -267,7 +299,9 @@
 								{expense.expense_type}
 							{/if}
 						</td>
-						<td>{expense.employee_name || '-'}</td>
+						{#if showEmployee}
+							<td>{expense.employee_name || '-'}</td>
+						{/if}
 						<td>{expense.owner_name || '-'}</td>
 						<td>{expense.payment_type}</td>
 						<td>

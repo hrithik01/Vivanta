@@ -120,6 +120,8 @@ const migrateDailyRoomSummary = () => {
 };
 
 ensureColumn('income', 'income_reference', 'TEXT NOT NULL DEFAULT "Room tariff"');
+ensureColumn('settings', 'todos_json', 'TEXT NOT NULL DEFAULT "[]"');
+ensureColumn('settings', 'pending_bills_json', 'TEXT NOT NULL DEFAULT "[]"');
 migrateDailyRoomSummary();
 
 const seedRooms = ['201', '202', '203', '204', '205', '206', '207', '301', '302', '303', '304', '305', '306', '307'];

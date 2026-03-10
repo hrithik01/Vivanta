@@ -76,6 +76,20 @@ CREATE TABLE IF NOT EXISTS settings (
 	master_cash_start REAL NOT NULL DEFAULT 0,
 	master_online_start REAL NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS hrithik_settings (
+	id INTEGER PRIMARY KEY CHECK (id = 1),
+	opening_balance REAL NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS hrithik_transactions (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	date TEXT NOT NULL,
+	entry_type TEXT NOT NULL CHECK (entry_type IN ('expense', 'income')),
+	amount REAL NOT NULL,
+	notes TEXT,
+	created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 db.exec(schema);
@@ -156,5 +170,6 @@ insertIfEmpty('expense_types', seedExpenseTypes);
 insertIfEmpty('owners', seedOwners);
 
 db.prepare('INSERT OR IGNORE INTO settings (id, master_cash_start, master_online_start) VALUES (1, 0, 0)').run();
+db.prepare('INSERT OR IGNORE INTO hrithik_settings (id, opening_balance) VALUES (1, 0)').run();
 
 export default db;

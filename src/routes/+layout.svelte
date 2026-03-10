@@ -6,10 +6,12 @@
 		{ href: '/income', label: 'Income' },
 		{ href: '/expenses', label: 'Expenses' },
 		{ href: '/masters', label: 'Masters' },
+		{ href: '/hrithik', label: 'Hrithik' },
 		{ href: '/reports', label: 'Reports' }
 	];
 	let theme = 'light';
 
+	/** @param {string} value */
 	const applyTheme = (value) => {
 		theme = value;
 		document.body.dataset.theme = value;

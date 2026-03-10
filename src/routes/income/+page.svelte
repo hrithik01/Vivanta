@@ -4,6 +4,14 @@
 
 	const today = new Date().toISOString().slice(0, 10);
 	let selectedDate = today;
+	const dateRangeOptions = [
+		{ label: 'Last 1 week', days: 7 },
+		{ label: 'Last 2 week', days: 14 },
+		{ label: 'Last 3 week', days: 21 },
+		{ label: 'Last 4 week', days: 28 },
+		{ label: 'Last 2 months', days: 60 }
+	];
+	let selectedRangeDays = 14;
 	let rooms = [];
 	let incomeList = [];
 	let editAmounts = {};
@@ -42,7 +50,7 @@
 
 	const loadIncome = async () => {
 		const startDate = new Date(selectedDate);
-		startDate.setDate(startDate.getDate() - 13);
+		startDate.setDate(startDate.getDate() - (selectedRangeDays - 1));
 		const start = startDate.toISOString().slice(0, 10);
 		const res = await fetch(`/api/income?start=${start}&end=${selectedDate}`);
 		if (res.ok) {
@@ -155,6 +163,13 @@
 		await loadIncome();
 	};
 
+	const onRangeChange = async () => {
+		await loadIncome();
+	};
+
+	$: selectedRangeLabel =
+		dateRangeOptions.find((option) => option.days === Number(selectedRangeDays))?.label || 'Last 2 week';
+
 	$: filteredIncome =
 		incomeTypeFilter === 'all'
 			? incomeList
@@ -220,8 +235,16 @@
 </section>
 
 <section class="panel">
-	<h2>Income (Last 14 Days ending {formatShortDate(selectedDate)})</h2>
+	<h2>Income ({selectedRangeLabel} ending {formatShortDate(selectedDate)})</h2>
 	<div class="filter-row">
+		<label>
+			<span>Date Range</span>
+			<select bind:value={selectedRangeDays} on:change={onRangeChange}>
+				{#each dateRangeOptions as option}
+					<option value={option.days}>{option.label}</option>
+				{/each}
+			</select>
+		</label>
 		<label>
 			<span>Filter by Type</span>
 			<select bind:value={incomeTypeFilter}>

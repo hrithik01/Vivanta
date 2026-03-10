@@ -4,6 +4,14 @@
 
 	const today = new Date().toISOString().slice(0, 10);
 	let selectedDate = today;
+	const dateRangeOptions = [
+		{ label: 'Last 1 week', days: 7 },
+		{ label: 'Last 2 week', days: 14 },
+		{ label: 'Last 3 week', days: 21 },
+		{ label: 'Last 4 week', days: 28 },
+		{ label: 'Last 2 months', days: 60 }
+	];
+	let selectedRangeDays = 14;
 	let expenseTypes = [];
 	let employees = [];
 	let owners = [];
@@ -48,7 +56,7 @@
 
 	const loadExpenses = async () => {
 		const startDate = new Date(selectedDate);
-		startDate.setDate(startDate.getDate() - 13);
+		startDate.setDate(startDate.getDate() - (selectedRangeDays - 1));
 		const start = startDate.toISOString().slice(0, 10);
 		const res = await fetch(`/api/expenses?start=${start}&end=${selectedDate}`);
 		if (res.ok) {
@@ -148,6 +156,13 @@
 		await loadExpenses();
 	};
 
+	const onRangeChange = async () => {
+		await loadExpenses();
+	};
+
+	$: selectedRangeLabel =
+		dateRangeOptions.find((option) => option.days === Number(selectedRangeDays))?.label || 'Last 2 week';
+
 	$: selectedType = expenseTypes.find((type) => String(type.id) === String(form.expense_type_id));
 	$: requiresEmployee = selectedType?.name.toLowerCase() === 'employee';
 	$: requiresOwner = selectedType?.name.toLowerCase() === 'owner payout';
@@ -227,8 +242,16 @@
 </section>
 
 <section class="panel">
-	<h2>Expenses (Last 14 Days ending {formatShortDate(selectedDate)})</h2>
+	<h2>Expenses ({selectedRangeLabel} ending {formatShortDate(selectedDate)})</h2>
 	<div class="filter-row">
+		<label>
+			<span>Date Range</span>
+			<select bind:value={selectedRangeDays} on:change={onRangeChange}>
+				{#each dateRangeOptions as option}
+					<option value={option.days}>{option.label}</option>
+				{/each}
+			</select>
+		</label>
 		<label>
 			<span>Filter by Expense Type</span>
 			<select bind:value={expenseTypeFilter}>

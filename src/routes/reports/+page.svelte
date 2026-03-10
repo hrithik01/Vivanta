@@ -6,6 +6,7 @@
 	let startDate = today;
 	let endDate = today;
 	let expenseTypes = [];
+	let incomeType = 'all';
 	let expenseTypeId = 'all';
 	let report = null;
 	let message = '';
@@ -21,7 +22,7 @@
 	const runReport = async () => {
 		message = '';
 		const res = await fetch(
-			`/api/reports?start=${startDate}&end=${endDate}&expenseTypeId=${expenseTypeId}`
+			`/api/reports?start=${startDate}&end=${endDate}&incomeType=${incomeType}&expenseTypeId=${expenseTypeId}`
 		);
 		if (res.ok) {
 			report = await res.json();
@@ -39,7 +40,7 @@
 
 <section class="panel">
 	<h2>Reports</h2>
-	<p class="muted">Get totals for any date range and expense type.</p>
+	<p class="muted">Get totals and all entries for any date range with income/expense filters.</p>
 	<div class="form-grid">
 		<label>
 			<span>Start Date</span>
@@ -48,6 +49,14 @@
 		<label>
 			<span>End Date</span>
 			<input type="date" bind:value={endDate} />
+		</label>
+		<label>
+			<span>Income Type</span>
+			<select bind:value={incomeType}>
+				<option value="all">All</option>
+				<option value="cash">Cash</option>
+				<option value="online">Online</option>
+			</select>
 		</label>
 		<label>
 			<span>Expense Type</span>
@@ -80,6 +89,78 @@
 				<small>Cash: {formatINR(report.cash_expense)} | Online: {formatINR(report.online_expense)}</small>
 			</div>
 		</div>
+	</section>
+
+	<section class="panel">
+		<h3>Income Entries ({report.income_entries?.length || 0})</h3>
+		<table>
+			<thead>
+				<tr>
+					<th>Date</th>
+					<th>Room</th>
+					<th>Group Booking</th>
+					<th>Reference</th>
+					<th>Type</th>
+					<th>Amount</th>
+					<th>Notes</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#if !report.income_entries || report.income_entries.length === 0}
+					<tr>
+						<td colspan="7" class="muted">No income entries found for this period and filter.</td>
+					</tr>
+				{:else}
+					{#each report.income_entries as income}
+						<tr>
+							<td>{income.date}</td>
+							<td>{income.room_number || '-'}</td>
+							<td>{income.group_booking || '-'}</td>
+							<td>{income.income_reference || '-'}</td>
+							<td>{income.income_type}</td>
+							<td>{formatINR(income.amount)}</td>
+							<td>{income.notes || '-'}</td>
+						</tr>
+					{/each}
+				{/if}
+			</tbody>
+		</table>
+	</section>
+
+	<section class="panel">
+		<h3>Expense Entries ({report.expense_entries?.length || 0})</h3>
+		<table>
+			<thead>
+				<tr>
+					<th>Date</th>
+					<th>Type</th>
+					<th>Employee</th>
+					<th>Owner</th>
+					<th>Payment</th>
+					<th>Amount</th>
+					<th>Notes</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#if !report.expense_entries || report.expense_entries.length === 0}
+					<tr>
+						<td colspan="7" class="muted">No expense entries found for this period and filter.</td>
+					</tr>
+				{:else}
+					{#each report.expense_entries as expense}
+						<tr>
+							<td>{expense.date}</td>
+							<td>{expense.expense_type}</td>
+							<td>{expense.employee_name || '-'}</td>
+							<td>{expense.owner_name || '-'}</td>
+							<td>{expense.payment_type}</td>
+							<td>{formatINR(expense.amount)}</td>
+							<td>{expense.notes || '-'}</td>
+						</tr>
+					{/each}
+				{/if}
+			</tbody>
+		</table>
 	</section>
 {/if}
 
@@ -141,5 +222,18 @@
 
 	.muted {
 		color: var(--muted);
+	}
+
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		margin-top: 12px;
+	}
+
+	th,
+	td {
+		padding: 10px;
+		border-bottom: 1px solid var(--border);
+		text-align: left;
 	}
 </style>

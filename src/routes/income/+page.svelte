@@ -20,6 +20,7 @@
 	let editDates = {};
 	let editingId = null;
 	let incomeTypeFilter = 'all';
+	let selectedRoomFilter = 'all';
 	let showReference = false;
 	let showGroupBooking = false;
 	let showActions = false;
@@ -170,10 +171,12 @@
 	$: selectedRangeLabel =
 		dateRangeOptions.find((option) => option.days === Number(selectedRangeDays))?.label || 'Last 2 week';
 
-	$: filteredIncome =
-		incomeTypeFilter === 'all'
-			? incomeList
-			: incomeList.filter((income) => income.income_type === incomeTypeFilter);
+	$: filteredIncome = incomeList.filter((income) => {
+		const matchesType = incomeTypeFilter === 'all' || income.income_type === incomeTypeFilter;
+		const matchesRoom =
+			selectedRoomFilter === 'all' || String(income.room_number || '') === String(selectedRoomFilter);
+		return matchesType && matchesRoom;
+	});
 </script>
 
 <section class="panel">
@@ -251,6 +254,15 @@
 				<option value="all">All</option>
 				<option value="cash">Cash</option>
 				<option value="online">Online</option>
+			</select>
+		</label>
+		<label>
+			<span>Filter by Room</span>
+			<select bind:value={selectedRoomFilter}>
+				<option value="all">All Rooms</option>
+				{#each rooms as room}
+					<option value={room.room_number}>{room.room_number}</option>
+				{/each}
 			</select>
 		</label>
 		<label class="checkbox">

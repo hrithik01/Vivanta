@@ -29,6 +29,38 @@
 	let billDraftText = '';
 	let billDraftDone = false;
 
+	const MS_IN_DAY = 24 * 60 * 60 * 1000;
+	const defaultCheckOutDate = new Date();
+	const defaultCheckInDate = new Date(defaultCheckOutDate);
+	defaultCheckInDate.setDate(defaultCheckOutDate.getDate() - 4);
+
+	const parseDateLocal = (value) => {
+		const [year, month, day] = value.split('-').map(Number);
+		return new Date(year, month - 1, day);
+	};
+
+	let checkOutInput = '';
+	let checkInInput = '';
+	let daysBetween = 0;
+
+	const normalizeDate = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+	const formatDateLocal = (date) => {
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const day = String(date.getDate()).padStart(2, '0');
+		return `${year}-${month}-${day}`;
+	};
+
+	checkOutInput = formatDateLocal(defaultCheckOutDate);
+	checkInInput = formatDateLocal(defaultCheckInDate);
+
+	$: {
+		const checkOutDate = parseDateLocal(checkOutInput);
+		const checkInDate = parseDateLocal(checkInInput);
+		daysBetween = Math.round((normalizeDate(checkOutDate) - normalizeDate(checkInDate)) / MS_IN_DAY);
+	}
+
 	const formatINR = (value) =>
 		new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value || 0);
 
@@ -253,6 +285,28 @@
 	{#if roomMessage}
 		<p class="muted">{roomMessage}</p>
 	{/if}
+</section>
+
+<section class="panel">
+	<h2>Days Calculator</h2>
+	<p class="muted">Select check-in and check-out dates to calculate total days.</p>
+	<div class="grid">
+		<div class="card">
+			<div class="board-input">
+				<label>
+					<span>Check-in Date</span>
+					<input type="date" bind:value={checkInInput} />
+				</label>
+				<label>
+					<span>Check-out Date</span>
+					<input type="date" bind:value={checkOutInput} />
+				</label>
+			</div>
+			<ul>
+				<li>Total Days: <strong>{daysBetween}</strong></li>
+			</ul>
+		</div>
+	</div>
 </section>
 
 <section class="panel">

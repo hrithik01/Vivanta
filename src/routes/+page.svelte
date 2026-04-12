@@ -215,16 +215,52 @@
 
 </script>
 
-<section class="panel">
-	<div class="row">
-		<div>
-			<h2>Daily Overview</h2>
-			<p class="muted">Track opening cash, income, and expenses for the day.</p>
-		</div>
-		<label>
+<section class="hero-panel">
+	<div>
+		<p class="brand-eyebrow">Front Office Snapshot</p>
+		<h2>Daily Overview</h2>
+		<p class="muted hero-copy">Keep the ledger clear across room income, bills, balances, and daily stay notes.</p>
+	</div>
+	<div class="hero-actions">
+		<label class="date-chip">
 			<span>Date</span>
 			<input type="date" bind:value={selectedDate} on:change={onDateChange} />
 		</label>
+		<a class="primary-button" href="/income">Add Income</a>
+		<a class="secondary-button" href="/expenses">Add Expense</a>
+	</div>
+</section>
+
+<section class="stats-grid">
+	<article class="stat-card">
+		<span>Total Income</span>
+		<strong>{formatINR(summary.total_income)}</strong>
+		<small>{formatINR(summary.cash_income)} cash and {formatINR(summary.online_income)} online</small>
+	</article>
+	<article class="stat-card">
+		<span>Total Expense</span>
+		<strong>{formatINR(summary.total_expense)}</strong>
+		<small>{formatINR(summary.cash_expense)} cash and {formatINR(summary.online_expense)} online</small>
+	</article>
+	<article class="stat-card">
+		<span>Master Cash Balance</span>
+		<strong>{formatINR(masterBalances.master_cash_balance)}</strong>
+		<small>Current running cash across the ledger</small>
+	</article>
+	<article class="stat-card">
+		<span>Master Account Balance</span>
+		<strong>{formatINR(masterBalances.master_online_balance)}</strong>
+		<small>Current running online account balance</small>
+	</article>
+</section>
+
+<section class="panel">
+	<div class="row">
+		<div>
+			<h2>Cash and Online Split</h2>
+			<p class="muted">Review the day totals without leaving the dashboard.</p>
+		</div>
+		<div class="pill-note">Hotel ledger in INR</div>
 	</div>
 
 	<div class="grid">
@@ -248,11 +284,17 @@
 </section>
 
 <section class="panel">
-	<h2>Daily Room Summary</h2>
-	<p class="muted">Add notes for rooms 201 - 207 and 301 - 307.</p>
+	<div class="section-header">
+		<div>
+			<h2>Daily Room Summary</h2>
+			<p class="muted">Add short stay notes for rooms 201 - 207 and 301 - 307.</p>
+		</div>
+		<div class="pill-note">Blur-save on field exit</div>
+	</div>
 	{#if roomSummaryDate}
 		<p class="muted">Last updated: {roomSummaryDate}</p>
 	{/if}
+	<div class="table-wrap">
 	<table>
 		<thead>
 			<tr>
@@ -282,14 +324,19 @@
 			{/if}
 		</tbody>
 	</table>
+	</div>
 	{#if roomMessage}
 		<p class="muted">{roomMessage}</p>
 	{/if}
 </section>
 
 <section class="panel">
-	<h2>Days Calculator</h2>
-	<p class="muted">Select check-in and check-out dates to calculate total days.</p>
+	<div class="section-header">
+		<div>
+			<h2>Days Calculator</h2>
+			<p class="muted">Estimate stay length using check-in and check-out dates.</p>
+		</div>
+	</div>
 	<div class="grid">
 		<div class="card">
 			<div class="board-input">
@@ -310,12 +357,18 @@
 </section>
 
 <section class="panel">
-	<h2>To-Dos</h2>
-	<p class="muted">Quick checklist for important tasks.</p>
+	<div class="section-header">
+		<div>
+			<h2>To-Dos</h2>
+			<p class="muted">Quick front-desk checklist for follow-ups and daily tasks.</p>
+		</div>
+		<div class="pill-note">Stored locally</div>
+	</div>
 	<div class="board-input">
 		<input type="text" placeholder="Add a to-do" bind:value={newTodoText} />
 		<button class="secondary" on:click={addTodo}>Add</button>
 	</div>
+	<div class="table-wrap">
 	<table>
 		<thead>
 			<tr>
@@ -360,18 +413,24 @@
 			{/if}
 		</tbody>
 	</table>
+	</div>
 	{#if boardMessage}
 		<p class="muted">{boardMessage}</p>
 	{/if}
 </section>
 
 <section class="panel">
-	<h2>Pending Bills</h2>
-	<p class="muted">Track bills that still need payment.</p>
+	<div class="section-header">
+		<div>
+			<h2>Pending Bills</h2>
+			<p class="muted">Track supplier and service bills that still need payment.</p>
+		</div>
+	</div>
 	<div class="board-input">
 		<input type="text" placeholder="Add a pending bill" bind:value={newPendingBillText} />
 		<button class="secondary" on:click={addPendingBill}>Add</button>
 	</div>
+	<div class="table-wrap">
 	<table>
 		<thead>
 			<tr>
@@ -416,11 +475,17 @@
 			{/if}
 		</tbody>
 	</table>
+	</div>
 </section>
 
 <section class="panel">
-	<h2>Master Balances</h2>
-	<p class="muted">Running balances across all time.</p>
+	<div class="section-header">
+		<div>
+			<h2>Master Balances</h2>
+			<p class="muted">Running balances across the full hotel ledger.</p>
+		</div>
+		<a class="ghost-button" href="/masters">Open Masters</a>
+	</div>
 	<div class="grid">
 		<div class="card">
 			<h3>Master Cash Balance</h3>
@@ -434,78 +499,50 @@
 </section>
 
 <style>
-	.panel {
-		background: var(--panel-bg);
-		border-radius: 16px;
-		padding: 20px;
-		box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-		margin-bottom: 20px;
+	.hero-copy {
+		max-width: 42rem;
 	}
 
-	.row {
-		display: flex;
-		justify-content: space-between;
-		gap: 16px;
-		align-items: center;
-		flex-wrap: wrap;
+	.brand-eyebrow {
+		margin: 0 0 0.45rem;
+		font-size: 0.75rem;
+		font-weight: 800;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--accent);
 	}
 
-	label {
-		display: grid;
-		gap: 6px;
-		font-size: 14px;
-		color: var(--muted);
-	}
-
-	input {
-		padding: 10px 12px;
-		border-radius: 10px;
+	.date-chip {
+		min-width: 220px;
+		padding: 0.9rem 1rem;
+		background: rgba(255, 255, 255, 0.36);
 		border: 1px solid var(--border);
-		background: var(--input-bg);
-		color: var(--text);
-		font-size: 14px;
+		border-radius: 20px;
 	}
 
-	.grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-		gap: 16px;
-		margin-top: 16px;
+	.date-chip input {
+		padding: 0;
+		border: 0;
+		background: transparent;
 	}
 
-	.card {
-		background: var(--card-bg);
-		padding: 16px;
-		border-radius: 12px;
+	.pill-note {
+		padding: 0.7rem 0.95rem;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.42);
 		border: 1px solid var(--border);
-	}
-
-	.card h3 {
-		margin-top: 0;
-	}
-
-	.muted {
 		color: var(--muted);
+		font-size: 0.88rem;
+		font-weight: 700;
 	}
 
-	.big {
-		font-size: 22px;
-		margin: 0;
-		font-weight: 600;
+	ul {
+		margin: 0.85rem 0 0;
+		padding-left: 1.1rem;
 	}
 
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		margin-top: 12px;
-	}
-
-	th,
-	td {
-		text-align: left;
-		padding: 10px 12px;
-		border-bottom: 1px solid var(--border);
-		font-size: 14px;
+	li + li {
+		margin-top: 0.55rem;
 	}
 
 	.notes-cell input {
@@ -532,5 +569,16 @@
 	.done {
 		text-decoration: line-through;
 		opacity: 0.7;
+	}
+
+	@media (max-width: 720px) {
+		.date-chip {
+			width: 100%;
+		}
+
+		.pill-note {
+			width: 100%;
+			text-align: center;
+		}
 	}
 </style>

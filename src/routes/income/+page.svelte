@@ -5,13 +5,15 @@
 	const today = new Date().toISOString().slice(0, 10);
 	let selectedDate = today;
 	const dateRangeOptions = [
-		{ label: 'Last 1 week', days: 7 },
-		{ label: 'Last 2 week', days: 14 },
-		{ label: 'Last 3 week', days: 21 },
-		{ label: 'Last 4 week', days: 28 },
-		{ label: 'Last 2 months', days: 60 }
+		{ label: 'Last 1 week', value: '7d', days: 7 },
+		{ label: 'Last 2 week', value: '14d', days: 14 },
+		{ label: 'Last 3 week', value: '21d', days: 21 },
+		{ label: 'Last 4 week', value: '28d', days: 28 },
+		{ label: 'Last 2 months', value: '2m', months: 2 },
+		{ label: 'Last 6 months', value: '6m', months: 6 },
+		{ label: 'Last 12 months', value: '12m', months: 12 }
 	];
-	let selectedRangeDays = 14;
+	let selectedRangeValue = '14d';
 	let rooms = [];
 	let incomeList = [];
 	let editAmounts = {};
@@ -44,15 +46,45 @@
 		return `${day}-${month}-${year.slice(2)}`;
 	};
 
+	const formatDateInput = (value) => {
+		const date = new Date(value);
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const day = String(date.getDate()).padStart(2, '0');
+		return `${year}-${month}-${day}`;
+	};
+
+	const subtractMonths = (dateText, months) => {
+		const [year, month, day] = String(dateText)
+			.split('-')
+			.map(Number);
+		const target = new Date(year, month - 1, 1);
+		target.setMonth(target.getMonth() - months);
+		const maxDayInTargetMonth = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+		return new Date(target.getFullYear(), target.getMonth(), Math.min(day, maxDayInTargetMonth));
+	};
+
+	const getRangeStart = (endDate, rangeOption) => {
+		const startDate = rangeOption?.months
+			? subtractMonths(endDate, rangeOption.months)
+			: new Date(`${endDate}T00:00:00`);
+		if (rangeOption?.months) {
+			startDate.setDate(startDate.getDate() + 1);
+		} else {
+			startDate.setDate(startDate.getDate() - ((rangeOption?.days || 14) - 1));
+		}
+		return formatDateInput(startDate);
+	};
+
 	const loadRooms = async () => {
 		const res = await fetch('/api/rooms');
 		if (res.ok) rooms = await res.json();
 	};
 
 	const loadIncome = async () => {
-		const startDate = new Date(selectedDate);
-		startDate.setDate(startDate.getDate() - (selectedRangeDays - 1));
-		const start = startDate.toISOString().slice(0, 10);
+		const selectedRange =
+			dateRangeOptions.find((option) => option.value === selectedRangeValue) || dateRangeOptions[1];
+		const start = getRangeStart(selectedDate, selectedRange);
 		const res = await fetch(`/api/income?start=${start}&end=${selectedDate}`);
 		if (res.ok) {
 			incomeList = await res.json();
@@ -169,12 +201,17 @@
 	};
 
 	$: selectedRangeLabel =
-		dateRangeOptions.find((option) => option.days === Number(selectedRangeDays))?.label || 'Last 2 week';
+		dateRangeOptions.find((option) => option.value === selectedRangeValue)?.label || 'Last 2 week';
 
 	$: filteredIncome = incomeList.filter((income) => {
 		const matchesType = incomeTypeFilter === 'all' || income.income_type === incomeTypeFilter;
+		const hasGroupBookingWithoutRoom =
+			!String(income.room_number || '').trim() && Boolean(String(income.group_booking || '').trim());
 		const matchesRoom =
-			selectedRoomFilter === 'all' || String(income.room_number || '') === String(selectedRoomFilter);
+			selectedRoomFilter === 'all' ||
+			(selectedRoomFilter === 'group-booking-only'
+				? hasGroupBookingWithoutRoom
+				: String(income.room_number || '') === String(selectedRoomFilter));
 		return matchesType && matchesRoom;
 	});
 </script>
@@ -242,9 +279,9 @@
 	<div class="filter-row">
 		<label>
 			<span>Date Range</span>
-			<select bind:value={selectedRangeDays} on:change={onRangeChange}>
+			<select bind:value={selectedRangeValue} on:change={onRangeChange}>
 				{#each dateRangeOptions as option}
-					<option value={option.days}>{option.label}</option>
+					<option value={option.value}>{option.label}</option>
 				{/each}
 			</select>
 		</label>
@@ -260,6 +297,7 @@
 			<span>Filter by Room</span>
 			<select bind:value={selectedRoomFilter}>
 				<option value="all">All Rooms</option>
+				<option value="group-booking-only">Group Booking Only (No Room)</option>
 				{#each rooms as room}
 					<option value={room.room_number}>{room.room_number}</option>
 				{/each}

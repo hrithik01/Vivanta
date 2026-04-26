@@ -21,6 +21,7 @@
 	let editDates = {};
 	let editingId = null;
 	let expenseTypeFilter = 'all';
+	let employeeFilter = 'all';
 	let showActions = false;
 	let showEmployee = false;
 	let message = '';
@@ -166,10 +167,21 @@
 	$: selectedType = expenseTypes.find((type) => String(type.id) === String(form.expense_type_id));
 	$: requiresEmployee = selectedType?.name.toLowerCase() === 'employee';
 	$: requiresOwner = selectedType?.name.toLowerCase() === 'owner payout';
-	$: filteredExpenses =
+	$: selectedExpenseTypeFilter =
 		expenseTypeFilter === 'all'
-			? expenseList
-			: expenseList.filter((expense) => String(expense.expense_type_id) === String(expenseTypeFilter));
+			? null
+			: expenseTypes.find((type) => String(type.id) === String(expenseTypeFilter));
+	$: showEmployeeFilter = selectedExpenseTypeFilter?.name?.toLowerCase() === 'employee';
+	$: if (!showEmployeeFilter) {
+		employeeFilter = 'all';
+	}
+	$: filteredExpenses = expenseList.filter((expense) => {
+		const matchesType =
+			expenseTypeFilter === 'all' || String(expense.expense_type_id) === String(expenseTypeFilter);
+		const matchesEmployee =
+			employeeFilter === 'all' || String(expense.employee_id) === String(employeeFilter);
+		return matchesType && matchesEmployee;
+	});
 </script>
 
 <section class="panel">
@@ -261,6 +273,17 @@
 				{/each}
 			</select>
 		</label>
+		{#if showEmployeeFilter}
+			<label>
+				<span>Filter by Employee</span>
+				<select bind:value={employeeFilter}>
+					<option value="all">All employees</option>
+					{#each employees as employee}
+						<option value={employee.id}>{employee.name}</option>
+					{/each}
+				</select>
+			</label>
+		{/if}
 		<label class="checkbox">
 			<input type="checkbox" bind:checked={showEmployee} />
 			<span>Show Employee</span>

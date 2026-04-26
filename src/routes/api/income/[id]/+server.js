@@ -4,7 +4,7 @@ import { json } from '@sveltejs/kit';
 
 export const PUT = async ({ params, request }) => {
 	const { id } = params;
-	const { amount, income_reference, room_number, date } = await request.json();
+	const { amount, notes, income_reference, room_number, date } = await request.json();
 	const numericAmount = Number(amount);
 	if (!numericAmount || numericAmount <= 0) {
 		return json({ error: 'Amount must be greater than zero.' }, { status: 400 });
@@ -29,8 +29,9 @@ export const PUT = async ({ params, request }) => {
 			return json({ error: 'Invalid room number.' }, { status: 400 });
 		}
 	}
-	db.prepare('UPDATE income SET amount = ?, income_reference = ?, room_number = ?, date = ? WHERE id = ?').run(
+	db.prepare('UPDATE income SET amount = ?, notes = ?, income_reference = ?, room_number = ?, date = ? WHERE id = ?').run(
 		numericAmount,
+		notes ? String(notes).trim() || null : null,
 		income_reference,
 		roomValue || null,
 		date,

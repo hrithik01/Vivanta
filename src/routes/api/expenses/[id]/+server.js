@@ -4,7 +4,7 @@ import { json } from '@sveltejs/kit';
 
 export const PUT = async ({ params, request }) => {
 	const { id } = params;
-	const { amount, expense_type_id, date } = await request.json();
+	const { amount, notes, expense_type_id, date } = await request.json();
 	const numericAmount = Number(amount);
 	if (!numericAmount || numericAmount <= 0) {
 		return json({ error: 'Amount must be greater than zero.' }, { status: 400 });
@@ -30,8 +30,9 @@ export const PUT = async ({ params, request }) => {
 	if (lowerType === 'owner payout' && !existing.owner_id) {
 		return json({ error: 'Owner is required for owner payout expenses.' }, { status: 400 });
 	}
-	db.prepare('UPDATE expenses SET amount = ?, expense_type_id = ?, date = ? WHERE id = ?').run(
+	db.prepare('UPDATE expenses SET amount = ?, notes = ?, expense_type_id = ?, date = ? WHERE id = ?').run(
 		numericAmount,
+		notes ? String(notes).trim() || null : null,
 		expense_type_id,
 		date,
 		id

@@ -17,6 +17,7 @@
 	let rooms = [];
 	let incomeList = [];
 	let editAmounts = {};
+	let editNotes = {};
 	let editReferences = {};
 	let editRooms = {};
 	let editDates = {};
@@ -26,6 +27,7 @@
 	let showReference = false;
 	let showGroupBooking = false;
 	let showActions = false;
+	let incomeSummary = null;
 	let form = {
 		room_number: '',
 		group_booking: '',
@@ -52,6 +54,10 @@
 		const month = String(date.getMonth() + 1).padStart(2, '0');
 		const day = String(date.getDate()).padStart(2, '0');
 		return `${year}-${month}-${day}`;
+	};
+
+	const clearIncomeSummary = () => {
+		incomeSummary = null;
 	};
 
 	const subtractMonths = (dateText, months) => {
@@ -92,6 +98,10 @@
 				acc[item.id] = item.amount;
 				return acc;
 			}, {});
+			editNotes = incomeList.reduce((acc, item) => {
+				acc[item.id] = item.notes || '';
+				return acc;
+			}, {});
 			editReferences = incomeList.reduce((acc, item) => {
 				acc[item.id] = item.income_reference;
 				return acc;
@@ -104,7 +114,15 @@
 				acc[item.id] = item.date;
 				return acc;
 			}, {});
+			clearIncomeSummary();
 		}
+	};
+
+	const showIncomeTotal = () => {
+		incomeSummary = {
+			count: filteredIncome.length,
+			amount: filteredIncome.reduce((sum, income) => sum + Number(income.amount || 0), 0)
+		};
 	};
 
 	const submitIncome = async () => {
@@ -160,6 +178,7 @@
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				amount: editAmounts[id],
+				notes: editNotes[id],
 				income_reference: editReferences[id],
 				room_number: editRooms[id] || null,
 				date: editDates[id]
@@ -178,6 +197,7 @@
 	const startEdit = (income) => {
 		editingId = income.id;
 		editAmounts[income.id] = income.amount;
+		editNotes[income.id] = income.notes || '';
 		editReferences[income.id] = income.income_reference;
 		editRooms[income.id] = income.room_number || '';
 		editDates[income.id] = income.date;
@@ -287,7 +307,7 @@
 		</label>
 		<label>
 			<span>Filter by Type</span>
-			<select bind:value={incomeTypeFilter}>
+			<select bind:value={incomeTypeFilter} on:change={clearIncomeSummary}>
 				<option value="all">All</option>
 				<option value="cash">Cash</option>
 				<option value="online">Online</option>
@@ -295,7 +315,7 @@
 		</label>
 		<label>
 			<span>Filter by Room</span>
-			<select bind:value={selectedRoomFilter}>
+			<select bind:value={selectedRoomFilter} on:change={clearIncomeSummary}>
 				<option value="all">All Rooms</option>
 				<option value="group-booking-only">Group Booking Only (No Room)</option>
 				{#each rooms as room}
@@ -315,6 +335,12 @@
 			<input type="checkbox" bind:checked={showActions} />
 			<span>Show Actions</span>
 		</label>
+	</div>
+	<div class="summary-row">
+		<button class="secondary total-button" type="button" on:click={showIncomeTotal}>Total</button>
+		{#if incomeSummary}
+			<p class="muted">Entries: {incomeSummary.count} | Total Amount: {formatINR(incomeSummary.amount)}</p>
+		{/if}
 	</div>
 	<table>
 		<thead>
@@ -402,7 +428,13 @@
 								{formatINR(income.amount)}
 							{/if}
 						</td>
-						<td>{income.notes || '-'}</td>
+						<td>
+							{#if editingId === income.id}
+								<input type="text" placeholder="Optional notes" bind:value={editNotes[income.id]} />
+							{:else}
+								{income.notes || '-'}
+							{/if}
+						</td>
 						{#if showActions}
 							<td>
 								<button class="secondary" on:click={() => startEdit(income)}>Edit</button>
@@ -497,6 +529,18 @@
 		gap: 16px;
 		margin: 12px 0 8px;
 		flex-wrap: wrap;
+	}
+
+	.summary-row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin: 8px 0 0;
+		flex-wrap: wrap;
+	}
+
+	.total-button {
+		min-width: 96px;
 	}
 
 	label.checkbox {

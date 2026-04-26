@@ -17,6 +17,7 @@
 	let owners = [];
 	let expenseList = [];
 	let editAmounts = {};
+	let editNotes = {};
 	let editTypes = {};
 	let editDates = {};
 	let editingId = null;
@@ -24,6 +25,7 @@
 	let employeeFilter = 'all';
 	let showActions = false;
 	let showEmployee = false;
+	let expenseSummary = null;
 	let message = '';
 	let form = {
 		expense_type_id: '',
@@ -42,6 +44,10 @@
 		const [year, month, day] = String(value).split('-');
 		if (!year || !month || !day) return value;
 		return `${day}-${month}-${year.slice(2)}`;
+	};
+
+	const clearExpenseSummary = () => {
+		expenseSummary = null;
 	};
 
 	const loadMasters = async () => {
@@ -66,6 +72,10 @@
 				acc[item.id] = item.amount;
 				return acc;
 			}, {});
+			editNotes = expenseList.reduce((acc, item) => {
+				acc[item.id] = item.notes || '';
+				return acc;
+			}, {});
 			editTypes = expenseList.reduce((acc, item) => {
 				acc[item.id] = item.expense_type_id;
 				return acc;
@@ -74,7 +84,15 @@
 				acc[item.id] = item.date;
 				return acc;
 			}, {});
+			clearExpenseSummary();
 		}
+	};
+
+	const showExpenseTotal = () => {
+		expenseSummary = {
+			count: filteredExpenses.length,
+			amount: filteredExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0)
+		};
 	};
 
 	const submitExpense = async () => {
@@ -123,6 +141,7 @@
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				amount: editAmounts[id],
+				notes: editNotes[id],
 				expense_type_id: editTypes[id],
 				date: editDates[id]
 			})
@@ -140,6 +159,7 @@
 	const startEdit = (expense) => {
 		editingId = expense.id;
 		editAmounts[expense.id] = expense.amount;
+		editNotes[expense.id] = expense.notes || '';
 		editTypes[expense.id] = expense.expense_type_id;
 		editDates[expense.id] = expense.date;
 	};
@@ -266,7 +286,7 @@
 		</label>
 		<label>
 			<span>Filter by Expense Type</span>
-			<select bind:value={expenseTypeFilter}>
+			<select bind:value={expenseTypeFilter} on:change={clearExpenseSummary}>
 				<option value="all">All</option>
 				{#each expenseTypes as type}
 					<option value={type.id}>{type.name}</option>
@@ -276,7 +296,7 @@
 		{#if showEmployeeFilter}
 			<label>
 				<span>Filter by Employee</span>
-				<select bind:value={employeeFilter}>
+				<select bind:value={employeeFilter} on:change={clearExpenseSummary}>
 					<option value="all">All employees</option>
 					{#each employees as employee}
 						<option value={employee.id}>{employee.name}</option>
@@ -292,6 +312,12 @@
 			<input type="checkbox" bind:checked={showActions} />
 			<span>Show Actions</span>
 		</label>
+	</div>
+	<div class="summary-row">
+		<button class="secondary total-button" type="button" on:click={showExpenseTotal}>Total</button>
+		{#if expenseSummary}
+			<p class="muted">Entries: {expenseSummary.count} | Total Amount: {formatINR(expenseSummary.amount)}</p>
+		{/if}
 	</div>
 	<table>
 		<thead>
@@ -361,7 +387,13 @@
 								{formatINR(expense.amount)}
 							{/if}
 						</td>
-						<td>{expense.notes || '-'}</td>
+						<td>
+							{#if editingId === expense.id}
+								<input type="text" placeholder="Optional notes" bind:value={editNotes[expense.id]} />
+							{:else}
+								{expense.notes || '-'}
+							{/if}
+						</td>
 						{#if showActions}
 							<td>
 								<button class="secondary" on:click={() => startEdit(expense)}>Edit</button>
@@ -456,6 +488,18 @@
 		gap: 16px;
 		margin: 12px 0 8px;
 		flex-wrap: wrap;
+	}
+
+	.summary-row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin: 8px 0 0;
+		flex-wrap: wrap;
+	}
+
+	.total-button {
+		min-width: 96px;
 	}
 
 	label.checkbox {

@@ -2,9 +2,11 @@
 import db from '$lib/server/db.js';
 import { json } from '@sveltejs/kit';
 
-const allowedRooms = ['201', '202', '203', '204', '205', '206', '207', '301', '302', '303', '304', '305', '306', '307'];
-
 export const GET = () => {
+	const allowedRooms = db
+		.prepare('SELECT room_number FROM rooms ORDER BY room_number')
+		.all()
+		.map((room) => room.room_number);
 	const latest = db
 		.prepare('SELECT date, notes_json FROM daily_room_summary ORDER BY date DESC LIMIT 1')
 		.get();
@@ -19,6 +21,10 @@ export const GET = () => {
 
 export const PUT = async ({ request }) => {
 	const { date, room_number, notes } = await request.json();
+	const allowedRooms = db
+		.prepare('SELECT room_number FROM rooms ORDER BY room_number')
+		.all()
+		.map((room) => room.room_number);
 
 	const roomValue = room_number ? String(room_number).trim() : '';
 	if (!roomValue || !allowedRooms.includes(roomValue)) {

@@ -339,10 +339,26 @@
 	<div class="summary-row">
 		<button class="secondary total-button" type="button" on:click={showIncomeTotal}>Total</button>
 		{#if incomeSummary}
-			<p class="muted">Entries: {incomeSummary.count} | Total Amount: {formatINR(incomeSummary.amount)}</p>
+			<p class="muted">Entries: {incomeSummary.count} | Total Amount: <span class="amount-value">{formatINR(incomeSummary.amount)}</span></p>
 		{/if}
 	</div>
 	<table>
+		<colgroup>
+			<col style="width: 12%;" />
+			<col style="width: 10%;" />
+			{#if showGroupBooking}
+				<col style="width: 14%;" />
+			{/if}
+			{#if showReference}
+				<col style="width: 14%;" />
+			{/if}
+			<col style="width: 10%;" />
+			<col style="width: 12%;" />
+			<col style="width: auto;" />
+			{#if showActions}
+				<col style="width: 14%;" />
+			{/if}
+		</colgroup>
 		<thead>
 			<tr>
 				<th>Date</th>
@@ -425,7 +441,7 @@
 									<button class="ghost" on:click={cancelEdit}>Cancel</button>
 								</div>
 							{:else}
-								{formatINR(income.amount)}
+								<span class="amount-value">{formatINR(income.amount)}</span>
 							{/if}
 						</td>
 						<td>
@@ -560,9 +576,14 @@
 		color: var(--muted);
 	}
 
+	.amount-value {
+		font-weight: 700;
+	}
+
 	table {
 		width: 100%;
 		border-collapse: collapse;
+		table-layout: fixed;
 		margin-top: 16px;
 	}
 
@@ -571,5 +592,6 @@
 		padding: 10px;
 		border-bottom: 1px solid var(--border);
 		text-align: left;
+		word-break: break-word;
 	}
 </style>

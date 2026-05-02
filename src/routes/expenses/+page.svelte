@@ -25,6 +25,7 @@
 	let employeeFilter = 'all';
 	let showActions = false;
 	let showEmployee = false;
+	let showOwner = false;
 	let expenseSummary = null;
 	let message = '';
 	let form = {
@@ -309,6 +310,10 @@
 			<span>Show Employee</span>
 		</label>
 		<label class="checkbox">
+			<input type="checkbox" bind:checked={showOwner} />
+			<span>Show Owner</span>
+		</label>
+		<label class="checkbox">
 			<input type="checkbox" bind:checked={showActions} />
 			<span>Show Actions</span>
 		</label>
@@ -316,7 +321,7 @@
 	<div class="summary-row">
 		<button class="secondary total-button" type="button" on:click={showExpenseTotal}>Total</button>
 		{#if expenseSummary}
-			<p class="muted">Entries: {expenseSummary.count} | Total Amount: {formatINR(expenseSummary.amount)}</p>
+			<p class="muted">Entries: {expenseSummary.count} | Total Amount: <span class="amount-value">{formatINR(expenseSummary.amount)}</span></p>
 		{/if}
 	</div>
 	<table>
@@ -327,7 +332,9 @@
 				{#if showEmployee}
 					<th>Employee</th>
 				{/if}
-				<th>Owner</th>
+				{#if showOwner}
+					<th>Owner</th>
+				{/if}
 				<th>Payment</th>
 				<th>Amount</th>
 				<th>Notes</th>
@@ -341,8 +348,9 @@
 				<tr>
 					<td
 						colspan={
-							6 +
+							5 +
 							(showEmployee ? 1 : 0) +
+							(showOwner ? 1 : 0) +
 							(showActions ? 1 : 0)
 						}
 						class="muted"
@@ -374,7 +382,9 @@
 						{#if showEmployee}
 							<td>{expense.employee_name || '-'}</td>
 						{/if}
-						<td>{expense.owner_name || '-'}</td>
+						{#if showOwner}
+							<td>{expense.owner_name || '-'}</td>
+						{/if}
 						<td>{expense.payment_type}</td>
 						<td>
 							{#if editingId === expense.id}
@@ -384,7 +394,7 @@
 									<button class="ghost" on:click={cancelEdit}>Cancel</button>
 								</div>
 							{:else}
-								{formatINR(expense.amount)}
+								<span class="amount-value">{formatINR(expense.amount)}</span>
 							{/if}
 						</td>
 						<td>
@@ -517,6 +527,10 @@
 
 	.muted {
 		color: var(--muted);
+	}
+
+	.amount-value {
+		font-weight: 700;
 	}
 
 	table {

@@ -1,17 +1,14 @@
 // @ts-nocheck
 import Database from 'better-sqlite3';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'fs';
 import path from 'path';
+import { DEFAULT_HOTEL, HOTEL_DEFINITIONS, normalizeHotel } from '$lib/server/hotel.js';
 
 const dataDir = path.resolve('data');
 if (!fs.existsSync(dataDir)) {
 	fs.mkdirSync(dataDir, { recursive: true });
 }
-
-const dbPath = path.join(dataDir, 'ledger.db');
-const db = new Database(dbPath);
-
-db.pragma('journal_mode = WAL');
 
 const schema = `
 CREATE TABLE IF NOT EXISTS rooms (
@@ -92,16 +89,17 @@ CREATE TABLE IF NOT EXISTS hrithik_transactions (
 );
 `;
 
-db.exec(schema);
+const hotelContext = new AsyncLocalStorage();
+const dbCache = new Map();
 
-const ensureColumn = (table, column, definition) => {
+const ensureColumn = (db, table, column, definition) => {
 	const columns = db.prepare(`PRAGMA table_info(${table})`).all().map((row) => row.name);
 	if (!columns.includes(column)) {
 		db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
 	}
 };
 
-const migrateDailyRoomSummary = () => {
+const migrateDailyRoomSummary = (db) => {
 	const columns = db.prepare('PRAGMA table_info(daily_room_summary)').all().map((row) => row.name);
 	if (columns.includes('room_number')) {
 		db.exec(`
@@ -133,12 +131,6 @@ const migrateDailyRoomSummary = () => {
 	}
 };
 
-ensureColumn('income', 'income_reference', 'TEXT NOT NULL DEFAULT "Room tariff"');
-ensureColumn('settings', 'todos_json', 'TEXT NOT NULL DEFAULT "[]"');
-ensureColumn('settings', 'pending_bills_json', 'TEXT NOT NULL DEFAULT "[]"');
-migrateDailyRoomSummary();
-
-const seedRooms = ['201', '202', '203', '204', '205', '206', '207', '301', '302', '303', '304', '305', '306', '307'];
 const seedEmployees = ['Harish', 'Raju', 'Khemraj', 'Dilip'];
 const seedExpenseTypes = [
 	'Employee',
@@ -153,7 +145,7 @@ const seedExpenseTypes = [
 ];
 const seedOwners = ['Hrithik', 'Hemant', 'Praveen'];
 
-const insertIfEmpty = (table, values) => {
+const insertIfEmpty = (db, table, values) => {
 	const count = db.prepare(`SELECT COUNT(*) as count FROM ${table}`).get().count;
 	if (count === 0) {
 		const stmt = db.prepare(`INSERT INTO ${table} (${table === 'rooms' ? 'room_number' : 'name'}) VALUES (?)`);
@@ -164,12 +156,52 @@ const insertIfEmpty = (table, values) => {
 	}
 };
 
-insertIfEmpty('rooms', seedRooms);
-insertIfEmpty('employees', seedEmployees);
-insertIfEmpty('expense_types', seedExpenseTypes);
-insertIfEmpty('owners', seedOwners);
+const initializeDb = (hotelId) => {
+	const hotel = HOTEL_DEFINITIONS[hotelId] || HOTEL_DEFINITIONS[DEFAULT_HOTEL];
+	const db = new Database(path.join(dataDir, hotel.dbFile));
+	db.pragma('journal_mode = WAL');
+	db.exec(schema);
 
-db.prepare('INSERT OR IGNORE INTO settings (id, master_cash_start, master_online_start) VALUES (1, 0, 0)').run();
-db.prepare('INSERT OR IGNORE INTO hrithik_settings (id, opening_balance) VALUES (1, 0)').run();
+	ensureColumn(db, 'income', 'income_reference', 'TEXT NOT NULL DEFAULT "Room tariff"');
+	ensureColumn(db, 'settings', 'todos_json', 'TEXT NOT NULL DEFAULT "[]"');
+	ensureColumn(db, 'settings', 'pending_bills_json', 'TEXT NOT NULL DEFAULT "[]"');
+	migrateDailyRoomSummary(db);
 
-export default db;
+	insertIfEmpty(db, 'rooms', hotel.rooms);
+	insertIfEmpty(db, 'employees', seedEmployees);
+	insertIfEmpty(db, 'expense_types', seedExpenseTypes);
+	insertIfEmpty(db, 'owners', seedOwners);
+
+	db.prepare('INSERT OR IGNORE INTO settings (id, master_cash_start, master_online_start) VALUES (1, 0, 0)').run();
+	db.prepare('INSERT OR IGNORE INTO hrithik_settings (id, opening_balance) VALUES (1, 0)').run();
+
+	return db;
+};
+
+const getDbForHotel = (hotel) => {
+	const hotelId = normalizeHotel(hotel);
+	if (!dbCache.has(hotelId)) {
+		dbCache.set(hotelId, initializeDb(hotelId));
+	}
+	return dbCache.get(hotelId);
+};
+
+const getActiveHotel = () => normalizeHotel(hotelContext.getStore() || DEFAULT_HOTEL);
+
+export const runWithHotel = (hotel, handler) => hotelContext.run(normalizeHotel(hotel), handler);
+export const getDb = (hotel) => getDbForHotel(hotel || getActiveHotel());
+
+const dbProxy = /** @type {any} */ (
+	new Proxy(
+	{},
+	{
+		get(_, prop) {
+			const activeDb = getDb();
+			const value = activeDb[prop];
+			return typeof value === 'function' ? value.bind(activeDb) : value;
+		}
+	}
+	)
+);
+
+export default dbProxy;

@@ -1,6 +1,8 @@
 <script>
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+
+	export let data;
 	const navItems = [
 		{ href: '/', label: 'Daily Overview' },
 		{ href: '/income', label: 'Income' },
@@ -10,6 +12,7 @@
 		{ href: '/reports', label: 'Reports' }
 	];
 	let theme = 'light';
+	let selectedHotel = data.hotel;
 
 	/** @param {string} value */
 	const applyTheme = (value) => {
@@ -22,16 +25,30 @@
 		applyTheme(theme === 'dark' ? 'light' : 'dark');
 	};
 
+	const switchHotel = async (event) => {
+		const hotel = event.currentTarget.value;
+		const res = await fetch('/api/hotel', {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ hotel })
+		});
+
+		if (res.ok) {
+			window.location.reload();
+		}
+	};
+
 	onMount(() => {
 		const stored = localStorage.getItem('theme');
 		const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 		applyTheme(stored || (prefersDark ? 'dark' : 'light'));
 	});
+
 </script>
 
 <svelte:head>
-	<title>Hotel Vivanta Ledger</title>
-	<meta name="description" content="Lightweight local hotel ledger dashboard for Vivanta" />
+	<title>{data.hotelDisplayName}</title>
+	<meta name="description" content={data.hotelDescription} />
 </svelte:head>
 
 <div class="backdrop-orb backdrop-orb-one"></div>
@@ -41,10 +58,18 @@
 	<header class="header panel-shell">
 		<div>
 			<p class="brand-kicker">Hotel Ledger</p>
-			<h1>Hotel Vivanta Ledger</h1>
+			<h1>{data.hotelDisplayName}</h1>
 			<p class="subtitle">Income, expenses, room notes, and balances in one local dashboard.</p>
 		</div>
 		<div class="header-actions">
+			<label class="hotel-switcher">
+				<span>Switch Hotel</span>
+				<select bind:value={selectedHotel} on:change={switchHotel}>
+					{#each data.hotels as hotelOption}
+						<option value={hotelOption.id}>{hotelOption.label}</option>
+					{/each}
+				</select>
+			</label>
 			<nav>
 				{#each navItems as item}
 					<a href={item.href} class:active={item.href === $page.url.pathname}>{item.label}</a>
@@ -488,6 +513,20 @@
 		background: var(--secondary-bg);
 		color: var(--secondary-text);
 		border-color: var(--border);
+	}
+
+	.hotel-switcher {
+		min-width: 190px;
+	}
+
+	.hotel-switcher span {
+		font-size: 0.72rem;
+		letter-spacing: 0.08em;
+	}
+
+	.hotel-switcher select {
+		padding: 0.6rem 0.8rem;
+		border-radius: 12px;
 	}
 
 	.main {

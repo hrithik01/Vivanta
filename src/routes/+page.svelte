@@ -287,7 +287,7 @@
 	<div class="section-header">
 		<div>
 			<h2>Daily Room Summary</h2>
-			<p class="muted">Add short stay notes for rooms 201 - 207 and 301 - 307.</p>
+			<p class="muted">Add short stay notes for all active hotel rooms.</p>
 		</div>
 		<div class="pill-note">Blur-save on field exit</div>
 	</div>

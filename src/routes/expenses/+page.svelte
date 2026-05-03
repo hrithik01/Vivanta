@@ -20,6 +20,8 @@
 	let editNotes = {};
 	let editTypes = {};
 	let editDates = {};
+	let editEmployees = {};
+	let editOwners = {};
 	let editingId = null;
 	let expenseTypeFilter = 'all';
 	let employeeFilter = 'all';
@@ -85,7 +87,30 @@
 				acc[item.id] = item.date;
 				return acc;
 			}, {});
+			editEmployees = expenseList.reduce((acc, item) => {
+				acc[item.id] = item.employee_id || '';
+				return acc;
+			}, {});
+			editOwners = expenseList.reduce((acc, item) => {
+				acc[item.id] = item.owner_id || '';
+				return acc;
+			}, {});
 			clearExpenseSummary();
+		}
+	};
+
+	const getTypeNameLower = (typeId) =>
+		expenseTypes.find((type) => String(type.id) === String(typeId))?.name?.toLowerCase() || '';
+
+	const onEditTypeChange = (id) => {
+		const lowerType = getTypeNameLower(editTypes[id]);
+		if (lowerType === 'employee') {
+			editOwners[id] = '';
+		} else if (lowerType === 'owner payout') {
+			editEmployees[id] = '';
+		} else {
+			editEmployees[id] = '';
+			editOwners[id] = '';
 		}
 	};
 
@@ -144,7 +169,9 @@
 				amount: editAmounts[id],
 				notes: editNotes[id],
 				expense_type_id: editTypes[id],
-				date: editDates[id]
+				date: editDates[id],
+				employee_id: editEmployees[id] || null,
+				owner_id: editOwners[id] || null
 			})
 		});
 		if (res.ok) {
@@ -163,6 +190,8 @@
 		editNotes[expense.id] = expense.notes || '';
 		editTypes[expense.id] = expense.expense_type_id;
 		editDates[expense.id] = expense.date;
+		editEmployees[expense.id] = expense.employee_id || '';
+		editOwners[expense.id] = expense.owner_id || '';
 	};
 
 	const cancelEdit = () => {
@@ -370,11 +399,26 @@
 						</td>
 						<td>
 							{#if editingId === expense.id}
-								<select bind:value={editTypes[expense.id]}>
+								<select bind:value={editTypes[expense.id]} on:change={() => onEditTypeChange(expense.id)}>
 									{#each expenseTypes as type}
 										<option value={type.id}>{type.name}</option>
 									{/each}
 								</select>
+								{#if getTypeNameLower(editTypes[expense.id]) === 'employee'}
+									<select bind:value={editEmployees[expense.id]}>
+										<option value="">Select employee</option>
+										{#each employees as employee}
+											<option value={employee.id}>{employee.name}</option>
+										{/each}
+									</select>
+								{:else if getTypeNameLower(editTypes[expense.id]) === 'owner payout'}
+									<select bind:value={editOwners[expense.id]}>
+										<option value="">Select owner</option>
+										{#each owners as owner}
+											<option value={owner.id}>{owner.name}</option>
+										{/each}
+									</select>
+								{/if}
 							{:else}
 								{expense.expense_type}
 							{/if}

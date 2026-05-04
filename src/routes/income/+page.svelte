@@ -342,21 +342,21 @@
 			<p class="muted">Entries: {incomeSummary.count} | Total Amount: <span class="amount-value">{formatINR(incomeSummary.amount)}</span></p>
 		{/if}
 	</div>
-	<table>
+	<table class="income-table">
 		<colgroup>
-			<col style="width: 12%;" />
-			<col style="width: 10%;" />
+			<col />
+			<col />
 			{#if showGroupBooking}
-				<col style="width: 14%;" />
+				<col />
 			{/if}
 			{#if showReference}
-				<col style="width: 14%;" />
+				<col />
 			{/if}
-			<col style="width: 10%;" />
-			<col style="width: 12%;" />
-			<col style="width: auto;" />
+			<col />
+			<col />
+			<col class="notes-column" />
 			{#if showActions}
-				<col style="width: 14%;" />
+				<col />
 			{/if}
 		</colgroup>
 		<thead>
@@ -371,7 +371,7 @@
 				{/if}
 				<th>Type</th>
 				<th>Amount</th>
-				<th>Notes</th>
+				<th class="notes-column">Notes</th>
 				{#if showActions}
 					<th>Action</th>
 				{/if}
@@ -444,7 +444,7 @@
 								<span class="amount-value">{formatINR(income.amount)}</span>
 							{/if}
 						</td>
-						<td>
+						<td class="notes-cell">
 							{#if editingId === income.id}
 								<input type="text" placeholder="Optional notes" bind:value={editNotes[income.id]} />
 							{:else}
@@ -583,8 +583,15 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		table-layout: fixed;
 		margin-top: 16px;
+	}
+
+	.income-table {
+		table-layout: fixed;
+	}
+
+	.income-table .notes-column {
+		width: 40%;
 	}
 
 	th,
@@ -592,6 +599,15 @@
 		padding: 10px;
 		border-bottom: 1px solid var(--border);
 		text-align: left;
-		word-break: break-word;
+	}
+
+	.notes-cell {
+		width: 40%;
+		white-space: normal;
+	}
+
+	.notes-cell input {
+		width: 100%;
+		box-sizing: border-box;
 	}
 </style>

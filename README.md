@@ -21,4 +21,4 @@ The SQLite database is created automatically at startup in the data/ folder.
 - Expense tracking with categories and payment type
 - Owner payouts
 - Master balances and custom date-range reports
-- Separate Hrithik ledger with standalone opening balance and transactions
+- Separate Hrithik ledger per hotel with independent cash and online opening balances, payment type tracking, and combined total balance

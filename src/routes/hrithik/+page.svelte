@@ -1,16 +1,27 @@
 <script>
 	// @ts-nocheck
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 
 	const today = new Date().toISOString().slice(0, 10);
 	let selectedDate = today;
-	let openingBalanceInput = 0;
+	let openingCashInput = 0;
+	let openingOnlineInput = 0;
 	let balance = {
-		opening_balance: 0,
+		opening_cash: 0,
+		opening_online: 0,
+		total_income_cash: 0,
+		total_income_online: 0,
+		total_expense_cash: 0,
+		total_expense_online: 0,
 		total_income: 0,
 		total_expense: 0,
-		balance: 0,
-		meaning: 'Settled'
+		balance_cash: 0,
+		balance_online: 0,
+		balance_total: 0,
+		meaning_cash: 'Settled',
+		meaning_online: 'Settled',
+		meaning_total: 'Settled'
 	};
 	let transactions = [];
 	let message = '';
@@ -19,6 +30,7 @@
 
 	let form = {
 		entry_type: 'expense',
+		payment_type: 'cash',
 		amount: '',
 		notes: ''
 	};
@@ -34,24 +46,23 @@
 	};
 
 	const loadBalance = async () => {
-		const res = await fetch('/api/hrithik/balance');
+		const res = await fetch('/api/hrithik/balance', { cache: 'no-store' });
 		if (res.ok) {
 			balance = await res.json();
-			openingBalanceInput = balance.opening_balance;
+			openingCashInput = balance.opening_cash;
+			openingOnlineInput = balance.opening_online;
 		}
 	};
 
 	const loadTransactions = async () => {
-		const startDate = new Date(selectedDate);
-		startDate.setDate(startDate.getDate() - 13);
-		const start = startDate.toISOString().slice(0, 10);
-		const res = await fetch(`/api/hrithik?start=${start}&end=${selectedDate}`);
+		const res = await fetch('/api/hrithik?limit=100', { cache: 'no-store' });
 		if (res.ok) {
 			transactions = await res.json();
 			editDrafts = transactions.reduce((acc, item) => {
 				acc[item.id] = {
 					date: item.date,
 					entry_type: item.entry_type,
+					payment_type: item.payment_type,
 					amount: item.amount,
 					notes: item.notes || ''
 				};
@@ -65,11 +76,14 @@
 		const res = await fetch('/api/hrithik/balance', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ opening_balance: openingBalanceInput })
+			body: JSON.stringify({
+				opening_cash: openingCashInput,
+				opening_online: openingOnlineInput
+			})
 		});
 		if (res.ok) {
 			balance = await res.json();
-			message = 'Hrithik master balance updated.';
+			message = 'Hrithik opening balances updated.';
 		} else {
 			const error = await res.json();
 			message = error.error || 'Failed to update balance.';
@@ -84,13 +98,14 @@
 			body: JSON.stringify({
 				date: selectedDate,
 				entry_type: form.entry_type,
+				payment_type: form.payment_type,
 				amount: form.amount,
 				notes: form.notes
 			})
 		});
 
 		if (res.ok) {
-			form = { entry_type: 'expense', amount: '', notes: '' };
+			form = { entry_type: 'expense', payment_type: 'cash', amount: '', notes: '' };
 			message = 'Hrithik transaction added.';
 			await Promise.all([loadTransactions(), loadBalance()]);
 		} else {
@@ -137,37 +152,59 @@
 		}
 	};
 
-	const onDateChange = async () => {
-		await loadTransactions();
-	};
-
 	onMount(async () => {
 		await Promise.all([loadBalance(), loadTransactions()]);
 	});
 </script>
 
 <section class="panel">
-	<h2>Hrithik Master Balance</h2>
+	<h2>{$page.data.hotelName} Hrithik Ledger</h2>
 	<p class="muted">
-		This section is fully separate from current transactions and master balances.
+		This {$page.data.hotelName} Hrithik ledger is separate from the main income, expense, and
+		master balance sections.
 	</p>
 	<div class="grid">
 		<div class="card">
-			<h3>Current Hrithik Balance</h3>
-			<p class="big">{formatINR(balance.balance)}</p>
-			<p class="muted">{balance.meaning}</p>
+			<h3>Hrithik Cash</h3>
+			<p class="big">{formatINR(balance.balance_cash)}</p>
+			<p class="muted">{balance.meaning_cash}</p>
 			<ul>
-				<li>Income from Vivanta to Hrithik: {formatINR(balance.total_income)} (added)</li>
-				<li>Expense by Hrithik for Vivanta: {formatINR(balance.total_expense)} (subtracted)</li>
+				<li>Opening cash: {formatINR(balance.opening_cash)}</li>
+				<li>Cash income to Hrithik: {formatINR(balance.total_income_cash)}</li>
+				<li>Cash expense by Hrithik: {formatINR(balance.total_expense_cash)}</li>
 			</ul>
 		</div>
 		<div class="card">
-			<h3>Opening Balance</h3>
+			<h3>Hrithik Online</h3>
+			<p class="big">{formatINR(balance.balance_online)}</p>
+			<p class="muted">{balance.meaning_online}</p>
+			<ul>
+				<li>Opening online: {formatINR(balance.opening_online)}</li>
+				<li>Online income to Hrithik: {formatINR(balance.total_income_online)}</li>
+				<li>Online expense by Hrithik: {formatINR(balance.total_expense_online)}</li>
+			</ul>
+		</div>
+		<div class="card">
+			<h3>Hrithik Total</h3>
+			<p class="big">{formatINR(balance.balance_total)}</p>
+			<p class="muted">{balance.meaning_total}</p>
+			<ul>
+				<li>Total income: {formatINR(balance.total_income)}</li>
+				<li>Total expense: {formatINR(balance.total_expense)}</li>
+				<li>Cash + online total: {formatINR(balance.balance_total)}</li>
+			</ul>
+		</div>
+		<div class="card">
+			<h3>Opening Balances</h3>
 			<label>
-				<span>Master Hrithik Opening (INR)</span>
-				<input type="number" step="1" bind:value={openingBalanceInput} />
+				<span>Hrithik Cash Opening (INR)</span>
+				<input type="number" step="1" bind:value={openingCashInput} />
 			</label>
-			<button on:click={saveOpeningBalance}>Save Hrithik Balance</button>
+			<label>
+				<span>Hrithik Online Opening (INR)</span>
+				<input type="number" step="1" bind:value={openingOnlineInput} />
+			</label>
+			<button on:click={saveOpeningBalance}>Save Opening Balances</button>
 		</div>
 	</div>
 </section>
@@ -176,11 +213,14 @@
 	<div class="row">
 		<div>
 			<h2>Hrithik Entry</h2>
-			<p class="muted">Negative balance means Hrithik to take from Vivanta. Positive means Hrithik to give to Vivanta.</p>
+			<p class="muted">
+				Negative means Hrithik should take from {$page.data.hotelName}. Positive means Hrithik
+				should give to {$page.data.hotelName}.
+			</p>
 		</div>
 		<label>
 			<span>Date</span>
-			<input type="date" bind:value={selectedDate} on:change={onDateChange} />
+			<input type="date" bind:value={selectedDate} />
 		</label>
 	</div>
 
@@ -188,8 +228,15 @@
 		<label>
 			<span>Entry Type</span>
 			<select bind:value={form.entry_type}>
-				<option value="expense">Expense by Hrithik for Vivanta (subtract)</option>
-				<option value="income">Income from Vivanta to Hrithik (add)</option>
+				<option value="expense">Expense by Hrithik for {$page.data.hotelName} (subtract)</option>
+				<option value="income">Income from {$page.data.hotelName} to Hrithik (add)</option>
+			</select>
+		</label>
+		<label>
+			<span>Type of Payment</span>
+			<select bind:value={form.payment_type}>
+				<option value="cash">Cash</option>
+				<option value="online">Online</option>
 			</select>
 		</label>
 		<label>
@@ -208,12 +255,13 @@
 </section>
 
 <section class="panel">
-	<h2>Hrithik Transactions (Last 14 Days ending {formatShortDate(selectedDate)})</h2>
+	<h2>Latest 100 Hrithik Transactions</h2>
 	<table>
 		<thead>
 			<tr>
 				<th>Date</th>
 				<th>Type</th>
+				<th>Payment</th>
 				<th>Amount</th>
 				<th>Notes</th>
 				<th>Action</th>
@@ -222,7 +270,7 @@
 		<tbody>
 			{#if transactions.length === 0}
 				<tr>
-					<td colspan="5" class="muted">No Hrithik transactions recorded for this period.</td>
+					<td colspan="6" class="muted">No Hrithik transactions recorded yet.</td>
 				</tr>
 			{:else}
 				{#each transactions as item}
@@ -242,6 +290,16 @@
 								</select>
 							{:else}
 								{item.entry_type}
+							{/if}
+						</td>
+						<td>
+							{#if editingId === item.id}
+								<select bind:value={editDrafts[item.id].payment_type}>
+									<option value="cash">Cash</option>
+									<option value="online">Online</option>
+								</select>
+							{:else}
+								{item.payment_type}
 							{/if}
 						</td>
 						<td>

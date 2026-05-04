@@ -25,6 +25,7 @@
 		applyTheme(theme === 'dark' ? 'light' : 'dark');
 	};
 
+	/** @param {Event & { currentTarget: HTMLSelectElement }} event */
 	const switchHotel = async (event) => {
 		const hotel = event.currentTarget.value;
 		const res = await fetch('/api/hotel', {

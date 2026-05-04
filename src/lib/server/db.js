@@ -76,13 +76,15 @@ CREATE TABLE IF NOT EXISTS settings (
 
 CREATE TABLE IF NOT EXISTS hrithik_settings (
 	id INTEGER PRIMARY KEY CHECK (id = 1),
-	opening_balance REAL NOT NULL DEFAULT 0
+	opening_cash REAL NOT NULL DEFAULT 0,
+	opening_online REAL NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS hrithik_transactions (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	date TEXT NOT NULL,
 	entry_type TEXT NOT NULL CHECK (entry_type IN ('expense', 'income')),
+	payment_type TEXT NOT NULL DEFAULT 'cash' CHECK (payment_type IN ('cash', 'online')),
 	amount REAL NOT NULL,
 	notes TEXT,
 	created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -131,6 +133,30 @@ const migrateDailyRoomSummary = (db) => {
 	}
 };
 
+const migrateHrithikSettings = (db) => {
+	const columns = db.prepare('PRAGMA table_info(hrithik_settings)').all().map((row) => row.name);
+	const hasOpeningBalance = columns.includes('opening_balance');
+	const hasOpeningCash = columns.includes('opening_cash');
+	const hasOpeningOnline = columns.includes('opening_online');
+
+	if (!hasOpeningCash) {
+		db.prepare('ALTER TABLE hrithik_settings ADD COLUMN opening_cash REAL NOT NULL DEFAULT 0').run();
+	}
+	if (!hasOpeningOnline) {
+		db.prepare('ALTER TABLE hrithik_settings ADD COLUMN opening_online REAL NOT NULL DEFAULT 0').run();
+	}
+
+	if (hasOpeningBalance) {
+		db.prepare(
+			`UPDATE hrithik_settings
+			 SET opening_cash = opening_balance
+			 WHERE COALESCE(opening_cash, 0) = 0
+			   AND COALESCE(opening_online, 0) = 0
+			   AND COALESCE(opening_balance, 0) != 0`
+		).run();
+	}
+};
+
 const seedEmployees = ['Harish', 'Raju', 'Khemraj', 'Dilip'];
 const seedExpenseTypes = [
 	'Employee',
@@ -165,7 +191,9 @@ const initializeDb = (hotelId) => {
 	ensureColumn(db, 'income', 'income_reference', 'TEXT NOT NULL DEFAULT "Room tariff"');
 	ensureColumn(db, 'settings', 'todos_json', 'TEXT NOT NULL DEFAULT "[]"');
 	ensureColumn(db, 'settings', 'pending_bills_json', 'TEXT NOT NULL DEFAULT "[]"');
+	ensureColumn(db, 'hrithik_transactions', 'payment_type', 'TEXT NOT NULL DEFAULT "cash" CHECK (payment_type IN (\'cash\', \'online\'))');
 	migrateDailyRoomSummary(db);
+	migrateHrithikSettings(db);
 
 	insertIfEmpty(db, 'rooms', hotel.rooms);
 	insertIfEmpty(db, 'employees', seedEmployees);
@@ -173,7 +201,7 @@ const initializeDb = (hotelId) => {
 	insertIfEmpty(db, 'owners', seedOwners);
 
 	db.prepare('INSERT OR IGNORE INTO settings (id, master_cash_start, master_online_start) VALUES (1, 0, 0)').run();
-	db.prepare('INSERT OR IGNORE INTO hrithik_settings (id, opening_balance) VALUES (1, 0)').run();
+	db.prepare('INSERT OR IGNORE INTO hrithik_settings (id, opening_cash, opening_online) VALUES (1, 0, 0)').run();
 
 	return db;
 };

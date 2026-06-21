@@ -35,6 +35,10 @@ export const GET = ({ url }) => {
 		cash_income: 0,
 		online_income: 0
 	};
+	let incomeBreakdown = {
+		cash: 0,
+		online: 0
+	};
 	let incomeEntries = [];
 	if (includeIncome) {
 		if (validIncomeType !== 'all') {
@@ -75,6 +79,10 @@ export const GET = ({ url }) => {
 				)
 				.all(start, end);
 		}
+		incomeBreakdown = {
+			cash: incomeTotals.cash_income || 0,
+			online: incomeTotals.online_income || 0
+		};
 	}
 
 	let expenseTotals = {
@@ -82,6 +90,12 @@ export const GET = ({ url }) => {
 		cash_expense: 0,
 		online_expense: 0
 	};
+	let expenseBreakdown = {
+		owner_payout_total: 0,
+		expense_without_owner_payout_total: 0
+	};
+	let expenseTotalsByType = [];
+	let ownerPayoutByOwner = [];
 	let expenseEntries = [];
 	if (includeExpense) {
 		if (expenseTypeId && expenseTypeId !== 'all' && validExpensePaymentType !== 'all') {
@@ -173,6 +187,69 @@ export const GET = ({ url }) => {
 				)
 				.all(start, end);
 		}
+
+		expenseTotalsByType = db
+			.prepare(
+				`SELECT
+				 et.id as expense_type_id,
+				 et.name as expense_type,
+				 COALESCE(SUM(e.amount), 0) as total_amount,
+				 COALESCE(SUM(CASE WHEN e.payment_type = 'cash' THEN e.amount ELSE 0 END), 0) as cash_amount,
+				 COALESCE(SUM(CASE WHEN e.payment_type = 'online' THEN e.amount ELSE 0 END), 0) as online_amount
+				 FROM expenses e
+				 JOIN expense_types et ON e.expense_type_id = et.id
+				 WHERE e.date BETWEEN ? AND ?
+					AND (? = 'all' OR e.expense_type_id = ?)
+					AND (? = 'all' OR e.payment_type = ?)
+				 GROUP BY et.id, et.name
+				 ORDER BY total_amount DESC, et.name ASC`
+			)
+			.all(
+				start,
+				end,
+				expenseTypeId && expenseTypeId !== 'all' ? expenseTypeId : 'all',
+				expenseTypeId && expenseTypeId !== 'all' ? expenseTypeId : 'all',
+				validExpensePaymentType,
+				validExpensePaymentType
+			);
+
+		ownerPayoutByOwner = db
+			.prepare(
+				`SELECT
+				 COALESCE(o.name, 'Unknown') as owner_name,
+				 COALESCE(SUM(e.amount), 0) as total_amount,
+				 COALESCE(SUM(CASE WHEN e.payment_type = 'cash' THEN e.amount ELSE 0 END), 0) as cash_amount,
+				 COALESCE(SUM(CASE WHEN e.payment_type = 'online' THEN e.amount ELSE 0 END), 0) as online_amount
+				 FROM expenses e
+				 JOIN expense_types et ON e.expense_type_id = et.id
+				 LEFT JOIN owners o ON e.owner_id = o.id
+				 WHERE e.date BETWEEN ? AND ?
+					AND LOWER(et.name) = 'owner payout'
+					AND (? = 'all' OR e.payment_type = ?)
+				 GROUP BY COALESCE(o.name, 'Unknown')
+				 ORDER BY total_amount DESC, owner_name ASC`
+			)
+			.all(start, end, validExpensePaymentType, validExpensePaymentType);
+
+		expenseBreakdown = db
+			.prepare(
+				`SELECT
+				 COALESCE(SUM(CASE WHEN LOWER(et.name) = 'owner payout' THEN e.amount ELSE 0 END), 0) as owner_payout_total,
+				 COALESCE(SUM(CASE WHEN LOWER(et.name) != 'owner payout' THEN e.amount ELSE 0 END), 0) as expense_without_owner_payout_total
+				 FROM expenses e
+				 JOIN expense_types et ON e.expense_type_id = et.id
+				 WHERE e.date BETWEEN ? AND ?
+					AND (? = 'all' OR e.expense_type_id = ?)
+					AND (? = 'all' OR e.payment_type = ?)`
+			)
+			.get(
+				start,
+				end,
+				expenseTypeId && expenseTypeId !== 'all' ? expenseTypeId : 'all',
+				expenseTypeId && expenseTypeId !== 'all' ? expenseTypeId : 'all',
+				validExpensePaymentType,
+				validExpensePaymentType
+			);
 	}
 
 	return json({
@@ -186,6 +263,10 @@ export const GET = ({ url }) => {
 		includeExpense,
 		...incomeTotals,
 		...expenseTotals,
+		income_breakdown: incomeBreakdown,
+		expense_breakdown: expenseBreakdown,
+		expense_totals_by_type: expenseTotalsByType,
+		owner_payout_by_owner: ownerPayoutByOwner,
 		income_entries: incomeEntries,
 		expense_entries: expenseEntries
 	});

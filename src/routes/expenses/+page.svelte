@@ -19,6 +19,7 @@
 	let editAmounts = {};
 	let editNotes = {};
 	let editTypes = {};
+	let editPaymentTypes = {};
 	let editDates = {};
 	let editEmployees = {};
 	let editOwners = {};
@@ -83,6 +84,10 @@
 				acc[item.id] = item.expense_type_id;
 				return acc;
 			}, {});
+			editPaymentTypes = expenseList.reduce((acc, item) => {
+				acc[item.id] = item.payment_type || 'cash';
+				return acc;
+			}, {});
 			editDates = expenseList.reduce((acc, item) => {
 				acc[item.id] = item.date;
 				return acc;
@@ -96,6 +101,27 @@
 				return acc;
 			}, {});
 			clearExpenseSummary();
+		}
+	};
+
+	const applyExpenseDefaults = (expense) => {
+		if (!expense) return;
+		form = {
+			expense_type_id: expense.expense_type_id || '',
+			employee_id: expense.employee_id || '',
+			owner_id: expense.owner_id || '',
+			amount: '',
+			payment_type: expense.payment_type || 'cash',
+			notes: ''
+		};
+	};
+
+	const loadLastExpenseEntry = async () => {
+		const res = await fetch('/api/expenses');
+		if (!res.ok) return;
+		const rows = await res.json();
+		if (rows.length > 0) {
+			applyExpenseDefaults(rows[0]);
 		}
 	};
 
@@ -139,7 +165,7 @@
 		});
 		if (res.ok) {
 			message = 'Expense added.';
-			form = { expense_type_id: '', employee_id: '', owner_id: '', amount: '', payment_type: 'cash', notes: '' };
+			applyExpenseDefaults(payload);
 			await loadExpenses();
 		} else {
 			const error = await res.json();
@@ -169,6 +195,7 @@
 				amount: editAmounts[id],
 				notes: editNotes[id],
 				expense_type_id: editTypes[id],
+				payment_type: editPaymentTypes[id] || 'cash',
 				date: editDates[id],
 				employee_id: editEmployees[id] || null,
 				owner_id: editOwners[id] || null
@@ -189,6 +216,7 @@
 		editAmounts[expense.id] = expense.amount;
 		editNotes[expense.id] = expense.notes || '';
 		editTypes[expense.id] = expense.expense_type_id;
+		editPaymentTypes[expense.id] = expense.payment_type || 'cash';
 		editDates[expense.id] = expense.date;
 		editEmployees[expense.id] = expense.employee_id || '';
 		editOwners[expense.id] = expense.owner_id || '';
@@ -200,6 +228,7 @@
 
 	onMount(async () => {
 		await loadMasters();
+		await loadLastExpenseEntry();
 		await loadExpenses();
 	});
 
@@ -429,7 +458,16 @@
 						{#if showOwner}
 							<td>{expense.owner_name || '-'}</td>
 						{/if}
-						<td>{expense.payment_type}</td>
+						<td>
+							{#if editingId === expense.id}
+								<select bind:value={editPaymentTypes[expense.id]}>
+									<option value="cash">Cash</option>
+									<option value="online">Online</option>
+								</select>
+							{:else}
+								{expense.payment_type}
+							{/if}
+						</td>
 						<td>
 							{#if editingId === expense.id}
 								<div class="inline">

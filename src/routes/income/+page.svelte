@@ -20,6 +20,8 @@
 	let editNotes = {};
 	let editReferences = {};
 	let editRooms = {};
+	let editGroupBookings = {};
+	let editIncomeTypes = {};
 	let editDates = {};
 	let editingId = null;
 	let incomeTypeFilter = 'all';
@@ -110,11 +112,40 @@
 				acc[item.id] = item.room_number || '';
 				return acc;
 			}, {});
+			editGroupBookings = incomeList.reduce((acc, item) => {
+				acc[item.id] = item.group_booking || '';
+				return acc;
+			}, {});
+			editIncomeTypes = incomeList.reduce((acc, item) => {
+				acc[item.id] = item.income_type || 'cash';
+				return acc;
+			}, {});
 			editDates = incomeList.reduce((acc, item) => {
 				acc[item.id] = item.date;
 				return acc;
 			}, {});
 			clearIncomeSummary();
+		}
+	};
+
+	const applyIncomeDefaults = (income) => {
+		if (!income) return;
+		form = {
+			room_number: income.room_number || '',
+			group_booking: '',
+			income_reference: income.income_reference || 'Room tariff',
+			amount: '',
+			income_type: income.income_type || 'cash',
+			notes: ''
+		};
+	};
+
+	const loadLastIncomeEntry = async () => {
+		const res = await fetch('/api/income');
+		if (!res.ok) return;
+		const rows = await res.json();
+		if (rows.length > 0) {
+			applyIncomeDefaults(rows[0]);
 		}
 	};
 
@@ -143,14 +174,7 @@
 		});
 		if (res.ok) {
 			message = 'Income added.';
-			form = {
-				room_number: '',
-				group_booking: '',
-				income_reference: 'Room tariff',
-				amount: '',
-				income_type: 'cash',
-				notes: ''
-			};
+			applyIncomeDefaults(payload);
 			await loadIncome();
 		} else {
 			const error = await res.json();
@@ -181,6 +205,8 @@
 				notes: editNotes[id],
 				income_reference: editReferences[id],
 				room_number: editRooms[id] || null,
+				group_booking: editGroupBookings[id] || null,
+				income_type: editIncomeTypes[id] || 'cash',
 				date: editDates[id]
 			})
 		});
@@ -200,6 +226,8 @@
 		editNotes[income.id] = income.notes || '';
 		editReferences[income.id] = income.income_reference;
 		editRooms[income.id] = income.room_number || '';
+		editGroupBookings[income.id] = income.group_booking || '';
+		editIncomeTypes[income.id] = income.income_type || 'cash';
 		editDates[income.id] = income.date;
 	};
 
@@ -209,6 +237,7 @@
 
 	onMount(async () => {
 		await loadRooms();
+		await loadLastIncomeEntry();
 		await loadIncome();
 	});
 
@@ -278,10 +307,26 @@
 		</label>
 		<label>
 			<span>Income Type</span>
-			<select bind:value={form.income_type}>
-				<option value="cash">Cash</option>
-				<option value="online">Online</option>
-			</select>
+			<div class="tile-group" role="radiogroup" aria-label="Income Type">
+				<button
+					type="button"
+					class={`tile-option ${form.income_type === 'cash' ? 'active' : ''}`}
+					on:click={() => (form.income_type = 'cash')}
+					role="radio"
+					aria-checked={form.income_type === 'cash'}
+				>
+					Cash
+				</button>
+				<button
+					type="button"
+					class={`tile-option ${form.income_type === 'online' ? 'active' : ''}`}
+					on:click={() => (form.income_type = 'online')}
+					role="radio"
+					aria-checked={form.income_type === 'online'}
+				>
+					Online
+				</button>
+			</div>
 		</label>
 		<label class="wide">
 			<span>Notes</span>
@@ -346,7 +391,7 @@
 		<colgroup>
 			<col />
 			<col />
-			{#if showGroupBooking}
+			{#if showGroupBooking || editingId !== null}
 				<col />
 			{/if}
 			{#if showReference}
@@ -363,7 +408,7 @@
 			<tr>
 				<th>Date</th>
 				<th>Room</th>
-				{#if showGroupBooking}
+				{#if showGroupBooking || editingId !== null}
 					<th>Group Booking</th>
 				{/if}
 				{#if showReference}
@@ -384,7 +429,7 @@
 						colspan={
 							6 +
 							(showReference ? 1 : 0) +
-							(showGroupBooking ? 1 : 0) +
+							((showGroupBooking || editingId !== null) ? 1 : 0) +
 							(showActions ? 1 : 0)
 						}
 						class="muted"
@@ -414,8 +459,14 @@
 								{income.room_number || '-'}
 							{/if}
 						</td>
-						{#if showGroupBooking}
-							<td>{income.group_booking || '-'}</td>
+						{#if showGroupBooking || editingId === income.id}
+							<td>
+								{#if editingId === income.id}
+									<input type="text" placeholder="Enter group booking" bind:value={editGroupBookings[income.id]} />
+								{:else}
+									{income.group_booking || '-'}
+								{/if}
+							</td>
 						{/if}
 						{#if showReference}
 							<td>
@@ -432,7 +483,16 @@
 								{/if}
 							</td>
 						{/if}
-						<td>{income.income_type}</td>
+						<td>
+							{#if editingId === income.id}
+								<select bind:value={editIncomeTypes[income.id]}>
+									<option value="cash">Cash</option>
+									<option value="online">Online</option>
+								</select>
+							{:else}
+								{income.income_type}
+							{/if}
+						</td>
 						<td>
 							{#if editingId === income.id}
 								<div class="inline">
@@ -609,5 +669,25 @@
 	.notes-cell input {
 		width: 100%;
 		box-sizing: border-box;
+	}
+
+	.tile-group {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 8px;
+	}
+
+	.tile-option {
+		margin-top: 0;
+		background: var(--secondary-bg);
+		color: var(--secondary-text);
+		border: 1px solid var(--border);
+		font-weight: 600;
+	}
+
+	.tile-option.active {
+		background: var(--primary-bg);
+		color: var(--primary-text);
+		border-color: transparent;
 	}
 </style>

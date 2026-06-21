@@ -98,22 +98,110 @@
 {#if report}
 	<section class="panel">
 		<h3>Summary</h3>
-		<div class="grid">
-			{#if report.includeIncome}
-				<div class="card">
-					<h4>Total Income</h4>
-					<p>{formatINR(report.total_income)}</p>
-					<small>Cash: {formatINR(report.cash_income)} | Online: {formatINR(report.online_income)}</small>
-				</div>
-			{/if}
-			{#if report.includeExpense}
-				<div class="card">
-					<h4>Total Expense</h4>
-					<p>{formatINR(report.total_expense)}</p>
-					<small>Cash: {formatINR(report.cash_expense)} | Online: {formatINR(report.online_expense)}</small>
-				</div>
-			{/if}
+		<div class="totals-grid">
+			<div class="card total-card">
+				<h4>Total Income</h4>
+				<p>{formatINR(report.includeIncome ? report.total_income : 0)}</p>
+			</div>
+			<div class="card total-card">
+				<h4>Total Cash Income</h4>
+				<p>{formatINR(report.includeIncome ? report.income_breakdown?.cash : 0)}</p>
+			</div>
+			<div class="card total-card">
+				<h4>Total Online Income</h4>
+				<p>{formatINR(report.includeIncome ? report.income_breakdown?.online : 0)}</p>
+			</div>
+			<div class="card total-card">
+				<h4>Total Owner Payout</h4>
+				<p>{formatINR(report.includeExpense ? report.expense_breakdown?.owner_payout_total : 0)}</p>
+			</div>
+			<div class="card total-card">
+				<h4>Expenses Without Owner Payout</h4>
+				<p>
+					{formatINR(
+						report.includeExpense ? report.expense_breakdown?.expense_without_owner_payout_total : 0
+					)}
+				</p>
+			</div>
 		</div>
+
+		{#if report.includeIncome}
+			<div class="card breakdown-card">
+				<h4>Income Breakdown</h4>
+				<div class="mini-grid">
+					<div>
+						<span class="muted">Total Cash Income</span>
+						<p>{formatINR(report.income_breakdown?.cash)}</p>
+					</div>
+					<div>
+						<span class="muted">Total Online Income</span>
+						<p>{formatINR(report.income_breakdown?.online)}</p>
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		{#if report.includeExpense}
+			<div class="card breakdown-card">
+				<h4>Expense Totals By Type</h4>
+				<table class="compact-table">
+					<thead>
+						<tr>
+							<th>Expense Type</th>
+							<th>Total</th>
+							<th>Cash</th>
+							<th>Online</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#if !report.expense_totals_by_type || report.expense_totals_by_type.length === 0}
+							<tr>
+								<td colspan="4" class="muted">No expense totals available for this period and filter.</td>
+							</tr>
+						{:else}
+							{#each report.expense_totals_by_type as typeTotal}
+								<tr>
+									<td>{typeTotal.expense_type}</td>
+									<td>{formatINR(typeTotal.total_amount)}</td>
+									<td>{formatINR(typeTotal.cash_amount)}</td>
+									<td>{formatINR(typeTotal.online_amount)}</td>
+								</tr>
+							{/each}
+						{/if}
+					</tbody>
+				</table>
+			</div>
+
+			<div class="card breakdown-card">
+				<h4>Owner Payout By Owner</h4>
+				<table class="compact-table">
+					<thead>
+						<tr>
+							<th>Owner</th>
+							<th>Total Payout</th>
+							<th>Cash</th>
+							<th>Online</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#if !report.owner_payout_by_owner || report.owner_payout_by_owner.length === 0}
+							<tr>
+								<td colspan="4" class="muted">No owner payout entries found for this period and filter.</td>
+							</tr>
+						{:else}
+							{#each report.owner_payout_by_owner as ownerTotal}
+								<tr>
+									<td>{ownerTotal.owner_name}</td>
+									<td>{formatINR(ownerTotal.total_amount)}</td>
+									<td>{formatINR(ownerTotal.cash_amount)}</td>
+									<td>{formatINR(ownerTotal.online_amount)}</td>
+								</tr>
+							{/each}
+						{/if}
+					</tbody>
+				</table>
+			</div>
+		{/if}
 	</section>
 
 	{#if report.includeIncome}
@@ -274,11 +362,52 @@
 		margin-top: 16px;
 	}
 
+	.totals-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+		gap: 16px;
+		margin-top: 16px;
+	}
+
 	.card {
 		background: var(--card-bg);
 		border-radius: 12px;
 		padding: 16px;
 		border: 1px solid var(--border);
+	}
+
+	.total-card {
+		padding: 22px;
+		min-height: 120px;
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+	}
+
+	.total-card h4 {
+		font-size: 15px;
+		margin: 0;
+		color: var(--muted);
+	}
+
+	.total-card p {
+		font-size: 30px;
+		font-weight: 700;
+		margin: 10px 0 0;
+	}
+
+	.breakdown-card {
+		margin-top: 16px;
+	}
+
+	.mini-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+		gap: 12px;
+	}
+
+	.compact-table {
+		margin-top: 8px;
 	}
 
 	.muted {

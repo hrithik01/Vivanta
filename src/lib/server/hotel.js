@@ -8,7 +8,7 @@ export const HOTEL_DEFINITIONS = /** @type {const} */ ({
 		displayName: 'Hotel Vivanta Ledger',
 		description: 'Lightweight local hotel ledger dashboard for Vivanta',
 		dbFile: 'ledger.db',
-		rooms: ['201', '202', '203', '204', '205', '206', '207', '301', '302', '303', '304', '305', '306', '307']
+		rooms: ['MULTIPLE', '201', '202', '203', '204', '205', '206', '207', '301', '302', '303', '304', '305', '306', '307']
 	},
 	bluemoon: {
 		id: 'bluemoon',
@@ -17,6 +17,7 @@ export const HOTEL_DEFINITIONS = /** @type {const} */ ({
 		description: 'Lightweight local hotel ledger dashboard for BlueMoon',
 		dbFile: 'ledger-bluemoon.db',
 		rooms: [
+			'MULTIPLE',
 			'201',
 			'202',
 			'203',

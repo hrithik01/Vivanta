@@ -4,7 +4,7 @@ import { json } from '@sveltejs/kit';
 
 export const PUT = async ({ params, request }) => {
 	const { id } = params;
-	const { amount, notes, expense_type_id, date, employee_id, owner_id } = await request.json();
+	const { amount, notes, expense_type_id, payment_type, date, employee_id, owner_id } = await request.json();
 	const numericAmount = Number(amount);
 	if (!numericAmount || numericAmount <= 0) {
 		return json({ error: 'Amount must be greater than zero.' }, { status: 400 });
@@ -18,6 +18,9 @@ export const PUT = async ({ params, request }) => {
 	}
 	if (!date) {
 		return json({ error: 'Date is required.' }, { status: 400 });
+	}
+	if (!['cash', 'online'].includes(payment_type)) {
+		return json({ error: 'Payment type must be cash or online.' }, { status: 400 });
 	}
 	const existing = db.prepare('SELECT id FROM expenses WHERE id = ?').get(id);
 	if (!existing) {
@@ -56,11 +59,12 @@ export const PUT = async ({ params, request }) => {
 	}
 
 	db.prepare(
-		'UPDATE expenses SET amount = ?, notes = ?, expense_type_id = ?, date = ?, employee_id = ?, owner_id = ? WHERE id = ?'
+		'UPDATE expenses SET amount = ?, notes = ?, expense_type_id = ?, payment_type = ?, date = ?, employee_id = ?, owner_id = ? WHERE id = ?'
 	).run(
 		numericAmount,
 		notes ? String(notes).trim() || null : null,
 		expense_type_id,
+		payment_type,
 		date,
 		normalizedEmployeeId,
 		normalizedOwnerId,

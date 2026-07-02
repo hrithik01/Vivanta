@@ -1,5 +1,6 @@
 // @ts-nocheck
 import db from '$lib/server/db.js';
+import { isValidExpensePaymentType } from '$lib/expense-payment.js';
 import { json } from '@sveltejs/kit';
 
 export const GET = ({ url }) => {
@@ -56,8 +57,8 @@ export const POST = async ({ request }) => {
 	if (!numericAmount || numericAmount <= 0) {
 		return json({ error: 'Amount must be greater than zero.' }, { status: 400 });
 	}
-	if (payment_type && !['cash', 'online'].includes(payment_type)) {
-		return json({ error: 'Payment type must be cash or online.' }, { status: 400 });
+	if (payment_type && !isValidExpensePaymentType(payment_type)) {
+		return json({ error: 'Payment type must be cash, online, or owner payout.' }, { status: 400 });
 	}
 
 	const expenseType = db.prepare('SELECT name FROM expense_types WHERE id = ?').get(expense_type_id);
@@ -65,11 +66,36 @@ export const POST = async ({ request }) => {
 		return json({ error: 'Invalid expense type.' }, { status: 400 });
 	}
 	const lowerType = expenseType.name.toLowerCase();
-	if (lowerType === 'employee' && !employee_id) {
+	let normalizedEmployeeId = employee_id || null;
+	let normalizedOwnerId = owner_id || null;
+	const normalizedPaymentType = payment_type || 'cash';
+
+	if (lowerType === 'employee' && !normalizedEmployeeId) {
 		return json({ error: 'Employee is required for employee expenses.' }, { status: 400 });
 	}
-	if (lowerType === 'owner payout' && !owner_id) {
-		return json({ error: 'Owner is required for owner payout expenses.' }, { status: 400 });
+	if ((lowerType === 'owner payout' || normalizedPaymentType === 'owner_payout') && !normalizedOwnerId) {
+		return json({ error: 'Owner is required for owner payout entries.' }, { status: 400 });
+	}
+
+	if (normalizedEmployeeId) {
+		const employee = db.prepare('SELECT id FROM employees WHERE id = ?').get(normalizedEmployeeId);
+		if (!employee) {
+			return json({ error: 'Invalid employee.' }, { status: 400 });
+		}
+	}
+
+	if (normalizedOwnerId) {
+		const owner = db.prepare('SELECT id FROM owners WHERE id = ?').get(normalizedOwnerId);
+		if (!owner) {
+			return json({ error: 'Invalid owner.' }, { status: 400 });
+		}
+	}
+
+	if (lowerType !== 'employee') {
+		normalizedEmployeeId = null;
+	}
+	if (lowerType !== 'owner payout' && normalizedPaymentType !== 'owner_payout') {
+		normalizedOwnerId = null;
 	}
 
 	const stmt = db.prepare(
@@ -79,10 +105,10 @@ export const POST = async ({ request }) => {
 	const info = stmt.run(
 		date,
 		expense_type_id,
-		employee_id || null,
-		owner_id || null,
+		normalizedEmployeeId,
+		normalizedOwnerId,
 		numericAmount,
-		payment_type || 'cash',
+		normalizedPaymentType,
 		notes || null
 	);
 	return json({ id: info.lastInsertRowid });

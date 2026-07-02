@@ -1,5 +1,6 @@
 // @ts-nocheck
 import db from '$lib/server/db.js';
+import { isValidExpensePaymentType } from '$lib/expense-payment.js';
 import { json } from '@sveltejs/kit';
 
 export const PUT = async ({ params, request }) => {
@@ -19,8 +20,8 @@ export const PUT = async ({ params, request }) => {
 	if (!date) {
 		return json({ error: 'Date is required.' }, { status: 400 });
 	}
-	if (!['cash', 'online'].includes(payment_type)) {
-		return json({ error: 'Payment type must be cash or online.' }, { status: 400 });
+	if (!isValidExpensePaymentType(payment_type)) {
+		return json({ error: 'Payment type must be cash, online, or owner payout.' }, { status: 400 });
 	}
 	const existing = db.prepare('SELECT id FROM expenses WHERE id = ?').get(id);
 	if (!existing) {
@@ -33,8 +34,8 @@ export const PUT = async ({ params, request }) => {
 	if (lowerType === 'employee' && !normalizedEmployeeId) {
 		return json({ error: 'Employee is required for employee expenses.' }, { status: 400 });
 	}
-	if (lowerType === 'owner payout' && !normalizedOwnerId) {
-		return json({ error: 'Owner is required for owner payout expenses.' }, { status: 400 });
+	if ((lowerType === 'owner payout' || payment_type === 'owner_payout') && !normalizedOwnerId) {
+		return json({ error: 'Owner is required for owner payout entries.' }, { status: 400 });
 	}
 
 	if (normalizedEmployeeId) {
@@ -54,7 +55,7 @@ export const PUT = async ({ params, request }) => {
 	if (lowerType !== 'employee') {
 		normalizedEmployeeId = null;
 	}
-	if (lowerType !== 'owner payout') {
+	if (lowerType !== 'owner payout' && payment_type !== 'owner_payout') {
 		normalizedOwnerId = null;
 	}
 

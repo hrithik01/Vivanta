@@ -1,6 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { onMount } from 'svelte';
+	import { EXPENSE_PAYMENT_TYPES, formatExpensePaymentType } from '$lib/expense-payment.js';
 
 	const today = new Date().toISOString().slice(0, 10);
 	let selectedDate = today;
@@ -39,6 +40,10 @@
 		payment_type: 'cash',
 		notes: ''
 	};
+	const expensePaymentOptions = EXPENSE_PAYMENT_TYPES.map((value) => ({
+		value,
+		label: formatExpensePaymentType(value)
+	}));
 
 	const formatINR = (value) =>
 		new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value || 0);
@@ -128,14 +133,16 @@
 	const getTypeNameLower = (typeId) =>
 		expenseTypes.find((type) => String(type.id) === String(typeId))?.name?.toLowerCase() || '';
 
+	const requiresEmployeeForExpense = (typeId) => getTypeNameLower(typeId) === 'employee';
+
+	const requiresOwnerForExpense = (typeId, paymentType) =>
+		getTypeNameLower(typeId) === 'owner payout' || paymentType === 'owner_payout';
+
 	const onEditTypeChange = (id) => {
-		const lowerType = getTypeNameLower(editTypes[id]);
-		if (lowerType === 'employee') {
-			editOwners[id] = '';
-		} else if (lowerType === 'owner payout') {
+		if (!requiresEmployeeForExpense(editTypes[id])) {
 			editEmployees[id] = '';
-		} else {
-			editEmployees[id] = '';
+		}
+		if (!requiresOwnerForExpense(editTypes[id], editPaymentTypes[id] || 'cash')) {
 			editOwners[id] = '';
 		}
 	};
@@ -244,8 +251,14 @@
 		dateRangeOptions.find((option) => option.days === Number(selectedRangeDays))?.label || 'Last 2 week';
 
 	$: selectedType = expenseTypes.find((type) => String(type.id) === String(form.expense_type_id));
-	$: requiresEmployee = selectedType?.name.toLowerCase() === 'employee';
-	$: requiresOwner = selectedType?.name.toLowerCase() === 'owner payout';
+	$: requiresEmployee = requiresEmployeeForExpense(form.expense_type_id);
+	$: requiresOwner = requiresOwnerForExpense(form.expense_type_id, form.payment_type);
+	$: if (!requiresEmployee) {
+		form.employee_id = '';
+	}
+	$: if (!requiresOwner) {
+		form.owner_id = '';
+	}
 	$: selectedExpenseTypeFilter =
 		expenseTypeFilter === 'all'
 			? null
@@ -315,10 +328,11 @@
 			<input type="number" min="0" step="1" bind:value={form.amount} />
 		</label>
 		<label>
-			<span>Payment Type</span>
+			<span>Paid From</span>
 			<select bind:value={form.payment_type}>
-				<option value="cash">Cash</option>
-				<option value="online">Online</option>
+				{#each expensePaymentOptions as option}
+					<option value={option.value}>{option.label}</option>
+				{/each}
 			</select>
 		</label>
 		<label class="wide">
@@ -393,7 +407,7 @@
 				{#if showOwner}
 					<th>Owner</th>
 				{/if}
-				<th>Payment</th>
+				<th>Paid From</th>
 				<th>Amount</th>
 				<th>Notes</th>
 				{#if showActions}
@@ -433,14 +447,15 @@
 										<option value={type.id}>{type.name}</option>
 									{/each}
 								</select>
-								{#if getTypeNameLower(editTypes[expense.id]) === 'employee'}
+								{#if requiresEmployeeForExpense(editTypes[expense.id])}
 									<select bind:value={editEmployees[expense.id]}>
 										<option value="">Select employee</option>
 										{#each employees as employee}
 											<option value={employee.id}>{employee.name}</option>
 										{/each}
 									</select>
-								{:else if getTypeNameLower(editTypes[expense.id]) === 'owner payout'}
+								{/if}
+								{#if requiresOwnerForExpense(editTypes[expense.id], editPaymentTypes[expense.id] || 'cash')}
 									<select bind:value={editOwners[expense.id]}>
 										<option value="">Select owner</option>
 										{#each owners as owner}
@@ -460,12 +475,13 @@
 						{/if}
 						<td>
 							{#if editingId === expense.id}
-								<select bind:value={editPaymentTypes[expense.id]}>
-									<option value="cash">Cash</option>
-									<option value="online">Online</option>
+								<select bind:value={editPaymentTypes[expense.id]} on:change={() => onEditTypeChange(expense.id)}>
+									{#each expensePaymentOptions as option}
+										<option value={option.value}>{option.label}</option>
+									{/each}
 								</select>
 							{:else}
-								{expense.payment_type}
+								{formatExpensePaymentType(expense.payment_type)}
 							{/if}
 						</td>
 						<td>

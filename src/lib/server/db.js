@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS expenses (
 	employee_id INTEGER,
 	owner_id INTEGER,
 	amount REAL NOT NULL,
-	payment_type TEXT NOT NULL DEFAULT 'cash' CHECK (payment_type IN ('cash', 'online')),
+	payment_type TEXT NOT NULL DEFAULT 'cash' CHECK (payment_type IN ('cash', 'online', 'owner_payout')),
 	notes TEXT,
 	created_at TEXT NOT NULL DEFAULT (datetime('now')),
 	FOREIGN KEY (expense_type_id) REFERENCES expense_types(id),
@@ -157,6 +157,45 @@ const migrateHrithikSettings = (db) => {
 	}
 };
 
+const migrateExpensePaymentTypes = (db) => {
+	const expensesTableSql = db
+		.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'expenses'")
+		.get()?.sql;
+
+	if (expensesTableSql?.includes("'owner_payout'")) {
+		return;
+	}
+
+	db.exec('PRAGMA foreign_keys = OFF;');
+	const migrate = db.transaction(() => {
+		db.exec(`
+			CREATE TABLE expenses_v2 (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				date TEXT NOT NULL,
+				expense_type_id INTEGER NOT NULL,
+				employee_id INTEGER,
+				owner_id INTEGER,
+				amount REAL NOT NULL,
+				payment_type TEXT NOT NULL DEFAULT 'cash' CHECK (payment_type IN ('cash', 'online', 'owner_payout')),
+				notes TEXT,
+				created_at TEXT NOT NULL DEFAULT (datetime('now')),
+				FOREIGN KEY (expense_type_id) REFERENCES expense_types(id),
+				FOREIGN KEY (employee_id) REFERENCES employees(id),
+				FOREIGN KEY (owner_id) REFERENCES owners(id)
+			);
+		`);
+		db.exec(`
+			INSERT INTO expenses_v2 (id, date, expense_type_id, employee_id, owner_id, amount, payment_type, notes, created_at)
+			SELECT id, date, expense_type_id, employee_id, owner_id, amount, payment_type, notes, created_at
+			FROM expenses;
+		`);
+		db.exec('DROP TABLE expenses;');
+		db.exec('ALTER TABLE expenses_v2 RENAME TO expenses;');
+	});
+	migrate();
+	db.exec('PRAGMA foreign_keys = ON;');
+};
+
 const seedEmployees = ['Harish', 'Raju', 'Khemraj', 'Dilip'];
 const seedExpenseTypes = [
 	'Employee',
@@ -194,6 +233,7 @@ const initializeDb = (hotelId) => {
 	ensureColumn(db, 'hrithik_transactions', 'payment_type', 'TEXT NOT NULL DEFAULT "cash" CHECK (payment_type IN (\'cash\', \'online\'))');
 	migrateDailyRoomSummary(db);
 	migrateHrithikSettings(db);
+	migrateExpensePaymentTypes(db);
 
 	insertIfEmpty(db, 'rooms', hotel.rooms);
 	insertIfEmpty(db, 'employees', seedEmployees);

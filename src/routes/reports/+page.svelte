@@ -1,6 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { onMount } from 'svelte';
+	import { EXPENSE_PAYMENT_TYPES, formatExpensePaymentType } from '$lib/expense-payment.js';
 
 	const today = new Date().toISOString().slice(0, 10);
 	let startDate = today;
@@ -12,6 +13,13 @@
 	let includeExpense = true;
 	let report = null;
 	let message = '';
+	const expensePaymentOptions = [
+		{ value: 'all', label: 'All' },
+		...EXPENSE_PAYMENT_TYPES.map((value) => ({
+			value,
+			label: formatExpensePaymentType(value)
+		}))
+	];
 
 	const formatINR = (value) =>
 		new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value || 0);
@@ -69,11 +77,11 @@
 		</label>
 		{#if includeIncome || includeExpense}
 			<label>
-				<span>Cash / Online</span>
+				<span>Payment / Source</span>
 				<select bind:value={paymentMode}>
-					<option value="all">All</option>
-					<option value="cash">Cash</option>
-					<option value="online">Online</option>
+					{#each expensePaymentOptions as option}
+						<option value={option.value}>{option.label}</option>
+					{/each}
 				</select>
 			</label>
 		{/if}
@@ -112,16 +120,36 @@
 				<p>{formatINR(report.includeIncome ? report.income_breakdown?.online : 0)}</p>
 			</div>
 			<div class="card total-card">
+				<h4>Total Cash Expense</h4>
+				<p>
+					{formatINR(
+						report.includeExpense ? report.expense_breakdown?.cash_expense_without_owner_payout_total : 0
+					)}
+				</p>
+			</div>
+			<div class="card total-card">
+				<h4>Total Online Expense</h4>
+				<p>
+					{formatINR(
+						report.includeExpense ? report.expense_breakdown?.online_expense_without_owner_payout_total : 0
+					)}
+				</p>
+			</div>
+			<div class="card total-card">
 				<h4>Total Owner Payout</h4>
 				<p>{formatINR(report.includeExpense ? report.expense_breakdown?.owner_payout_total : 0)}</p>
 			</div>
 			<div class="card total-card">
-				<h4>Expenses Without Owner Payout</h4>
-				<p>
-					{formatINR(
-						report.includeExpense ? report.expense_breakdown?.expense_without_owner_payout_total : 0
-					)}
-				</p>
+				<h4>Net Cash</h4>
+				<p>{formatINR(report.net_cash)}</p>
+			</div>
+			<div class="card total-card">
+				<h4>Net Online</h4>
+				<p>{formatINR(report.net_online)}</p>
+			</div>
+			<div class="card total-card">
+				<h4>Net Total</h4>
+				<p>{formatINR(report.net_total)}</p>
 			</div>
 		</div>
 
@@ -151,12 +179,13 @@
 							<th>Total</th>
 							<th>Cash</th>
 							<th>Online</th>
+							<th>Owner Payout</th>
 						</tr>
 					</thead>
 					<tbody>
 						{#if !report.expense_totals_by_type || report.expense_totals_by_type.length === 0}
 							<tr>
-								<td colspan="4" class="muted">No expense totals available for this period and filter.</td>
+								<td colspan="5" class="muted">No expense totals available for this period and filter.</td>
 							</tr>
 						{:else}
 							{#each report.expense_totals_by_type as typeTotal}
@@ -165,6 +194,7 @@
 									<td>{formatINR(typeTotal.total_amount)}</td>
 									<td>{formatINR(typeTotal.cash_amount)}</td>
 									<td>{formatINR(typeTotal.online_amount)}</td>
+									<td>{formatINR(typeTotal.owner_payout_amount)}</td>
 								</tr>
 							{/each}
 						{/if}
@@ -173,14 +203,14 @@
 			</div>
 
 			<div class="card breakdown-card">
-				<h4>Owner Payout By Owner</h4>
+				<h4>Ownerwise Balance</h4>
 				<table class="compact-table">
 					<thead>
 						<tr>
 							<th>Owner</th>
-							<th>Total Payout</th>
-							<th>Cash</th>
-							<th>Online</th>
+							<th>Total Owner Payout</th>
+							<th>Expenses From Owner Payout</th>
+							<th>Balance</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -192,9 +222,9 @@
 							{#each report.owner_payout_by_owner as ownerTotal}
 								<tr>
 									<td>{ownerTotal.owner_name}</td>
-									<td>{formatINR(ownerTotal.total_amount)}</td>
-									<td>{formatINR(ownerTotal.cash_amount)}</td>
-									<td>{formatINR(ownerTotal.online_amount)}</td>
+									<td>{formatINR(ownerTotal.gross_payout_amount)}</td>
+									<td>{formatINR(ownerTotal.expenses_from_owner_payout)}</td>
+									<td>{formatINR(ownerTotal.net_payout_amount)}</td>
 								</tr>
 							{/each}
 						{/if}
@@ -252,7 +282,7 @@
 						<th>Type</th>
 						<th>Employee</th>
 						<th>Owner</th>
-						<th>Payment</th>
+						<th>Paid From</th>
 						<th>Amount</th>
 						<th>Notes</th>
 					</tr>
@@ -269,7 +299,7 @@
 								<td>{expense.expense_type}</td>
 								<td>{expense.employee_name || '-'}</td>
 								<td>{expense.owner_name || '-'}</td>
-								<td>{expense.payment_type}</td>
+								<td>{formatExpensePaymentType(expense.payment_type)}</td>
 								<td>{formatINR(expense.amount)}</td>
 								<td>{expense.notes || '-'}</td>
 							</tr>
@@ -352,13 +382,6 @@
 		color: var(--primary-text);
 		cursor: pointer;
 		border: none;
-		margin-top: 16px;
-	}
-
-	.grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-		gap: 16px;
 		margin-top: 16px;
 	}
 

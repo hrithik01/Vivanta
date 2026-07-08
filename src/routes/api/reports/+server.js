@@ -21,12 +21,12 @@ export const GET = ({ url }) => {
 		return json({ error: 'Select income, expense, or both before running the report.' }, { status: 400 });
 	}
 
-	const validPaymentMode = isValidExpensePaymentType(paymentMode ?? '') ? paymentMode : 'all';
+	const validPaymentMode = isValidExpensePaymentType(paymentMode ?? '') ? (paymentMode || 'all') : 'all';
 	const validIncomeType =
 		INCOME_PAYMENT_TYPES.includes(validPaymentMode)
 			? validPaymentMode
 			: INCOME_PAYMENT_TYPES.includes(incomeType ?? '')
-				? incomeType
+				? (incomeType || 'all')
 				: 'all';
 	const validExpensePaymentType =
 		validPaymentMode !== 'all'

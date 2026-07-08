@@ -1,12 +1,24 @@
 <script>
 	// @ts-nocheck
 	import { onMount } from 'svelte';
+	import Icon from '$lib/components/Icon.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
+	import { toast } from '$lib/stores/toast.js';
+	import { formatINR } from '$lib/ui-utils.js';
 
 	let employees = [];
 	let expenseTypes = [];
 	let owners = [];
 	let settings = { master_cash_start: 0, master_online_start: 0 };
-	let message = '';
+	let loading = true;
+	let savingSettings = false;
+	let newEmployee = '';
+	let newExpenseType = '';
+	let newOwner = '';
+
+	let confirmOpen = false;
+	let confirmConfig = { title: '', message: '', onConfirm: () => {} };
 
 	const loadMasters = async () => {
 		const [empRes, typeRes, ownerRes, settingsRes] = await Promise.all([
@@ -21,104 +33,183 @@
 		if (settingsRes.ok) settings = await settingsRes.json();
 	};
 
-	const addEmployee = async (name) => {
-		if (!name.trim()) return;
-		await fetch('/api/employees', {
+	const addEmployee = async () => {
+		const name = newEmployee.trim();
+		if (!name) return;
+		const res = await fetch('/api/employees', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ name })
 		});
-		await loadMasters();
+		if (res.ok) {
+			newEmployee = '';
+			toast.success('Employee added.');
+			await loadMasters();
+		} else {
+			toast.error('Failed to add employee.');
+		}
 	};
 
 	const updateEmployee = async (employee) => {
-		await fetch(`/api/employees/${employee.id}`, {
+		const res = await fetch(`/api/employees/${employee.id}`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ name: employee.name })
 		});
-		await loadMasters();
+		if (res.ok) {
+			toast.success('Employee updated.');
+			await loadMasters();
+		} else {
+			toast.error('Failed to update employee.');
+		}
 	};
 
 	const deleteEmployee = async (id) => {
-		await fetch(`/api/employees/${id}`, { method: 'DELETE' });
-		await loadMasters();
+		const res = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
+		if (res.ok) {
+			toast.success('Employee removed.');
+			await loadMasters();
+		} else {
+			toast.error('Failed to remove employee.');
+		}
 	};
 
-	const addExpenseType = async (name) => {
-		if (!name.trim()) return;
-		await fetch('/api/expense-types', {
+	const addExpenseType = async () => {
+		const name = newExpenseType.trim();
+		if (!name) return;
+		const res = await fetch('/api/expense-types', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ name })
 		});
-		await loadMasters();
+		if (res.ok) {
+			newExpenseType = '';
+			toast.success('Expense type added.');
+			await loadMasters();
+		} else {
+			toast.error('Failed to add expense type.');
+		}
 	};
 
 	const updateExpenseType = async (type) => {
-		await fetch(`/api/expense-types/${type.id}`, {
+		const res = await fetch(`/api/expense-types/${type.id}`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ name: type.name })
 		});
-		await loadMasters();
+		if (res.ok) {
+			toast.success('Expense type updated.');
+			await loadMasters();
+		} else {
+			toast.error('Failed to update expense type.');
+		}
 	};
 
 	const deleteExpenseType = async (id) => {
-		await fetch(`/api/expense-types/${id}`, { method: 'DELETE' });
-		await loadMasters();
+		const res = await fetch(`/api/expense-types/${id}`, { method: 'DELETE' });
+		if (res.ok) {
+			toast.success('Expense type removed.');
+			await loadMasters();
+		} else {
+			toast.error('Failed to remove expense type.');
+		}
 	};
 
-	const addOwner = async (name) => {
-		if (!name.trim()) return;
-		await fetch('/api/owners', {
+	const addOwner = async () => {
+		const name = newOwner.trim();
+		if (!name) return;
+		const res = await fetch('/api/owners', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ name })
 		});
-		await loadMasters();
+		if (res.ok) {
+			newOwner = '';
+			toast.success('Owner added.');
+			await loadMasters();
+		} else {
+			toast.error('Failed to add owner.');
+		}
 	};
 
 	const updateOwner = async (owner) => {
-		await fetch(`/api/owners/${owner.id}`, {
+		const res = await fetch(`/api/owners/${owner.id}`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ name: owner.name })
 		});
-		await loadMasters();
+		if (res.ok) {
+			toast.success('Owner updated.');
+			await loadMasters();
+		} else {
+			toast.error('Failed to update owner.');
+		}
 	};
 
 	const deleteOwner = async (id) => {
-		await fetch(`/api/owners/${id}`, { method: 'DELETE' });
-		await loadMasters();
+		const res = await fetch(`/api/owners/${id}`, { method: 'DELETE' });
+		if (res.ok) {
+			toast.success('Owner removed.');
+			await loadMasters();
+		} else {
+			toast.error('Failed to remove owner.');
+		}
 	};
 
 	const saveSettings = async () => {
-		message = '';
+		savingSettings = true;
 		const res = await fetch('/api/settings', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(settings)
 		});
+		savingSettings = false;
 		if (res.ok) {
-			message = 'Master balances updated.';
 			settings = await res.json();
+			toast.success('Master balances updated.');
 		} else {
 			const error = await res.json();
-			message = error.error || 'Failed to save.';
+			toast.error(error.error || 'Failed to save.');
 		}
 	};
 
-	onMount(loadMasters);
+	const requestDelete = (type, name, id, onConfirm) => {
+		confirmConfig = {
+			title: `Remove ${type}?`,
+			message: `Are you sure you want to remove "${name}"? This may affect existing entries.`,
+			onConfirm: () => onConfirm(id)
+		};
+		confirmOpen = true;
+	};
 
-	let newEmployee = '';
-	let newExpenseType = '';
-	let newOwner = '';
+	onMount(async () => {
+		loading = true;
+		await loadMasters();
+		loading = false;
+	});
 </script>
 
-<section class="panel">
-	<h2>Master Balances</h2>
-	<p class="muted">Set the starting balances for cash and online accounts.</p>
+<ConfirmModal
+	open={confirmOpen}
+	title={confirmConfig.title}
+	message={confirmConfig.message}
+	confirmLabel="Remove"
+	cancelLabel="Cancel"
+	danger={true}
+	on:confirm={() => {
+		confirmConfig.onConfirm();
+		confirmOpen = false;
+	}}
+	on:cancel={() => (confirmOpen = false)}
+/>
+
+<section class="panel balance-panel">
+	<div class="row">
+		<div>
+			<h2>Master Balances</h2>
+			<p class="muted">Set the starting balances for cash and online accounts.</p>
+		</div>
+	</div>
 	<div class="form-grid">
 		<label>
 			<span>Master Cash Start (INR)</span>
@@ -129,124 +220,241 @@
 			<input type="number" min="0" step="1" bind:value={settings.master_online_start} />
 		</label>
 	</div>
-	<button on:click={saveSettings}>Save Balances</button>
-	{#if message}
-		<p class="muted">{message}</p>
-	{/if}
+	<button on:click={saveSettings} disabled={savingSettings}>
+		<Icon name="save" size={18} />
+		{savingSettings ? 'Saving…' : 'Save Balances'}
+	</button>
 </section>
 
-<section class="panel">
-	<h2>Employees</h2>
-	<div class="row">
-		<input placeholder="Add employee" bind:value={newEmployee} />
-		<button on:click={() => addEmployee(newEmployee)}>Add</button>
+{#if loading}
+	<div class="shimmer-panel" aria-label="Loading master data">
+		<div class="shimmer-line" style="width: 100%;"></div>
+		<div class="shimmer-line" style="width: 70%;"></div>
 	</div>
-	<ul>
-		{#each employees as employee}
-			<li>
-				<input bind:value={employee.name} />
-				<button on:click={() => updateEmployee(employee)}>Update</button>
-				<button class="secondary" on:click={() => deleteEmployee(employee.id)}>Remove</button>
-			</li>
-		{/each}
-	</ul>
-</section>
+{/if}
 
-<section class="panel">
-	<h2>Expense Types</h2>
-	<div class="row">
-		<input placeholder="Add expense type" bind:value={newExpenseType} />
-		<button on:click={() => addExpenseType(newExpenseType)}>Add</button>
-	</div>
-	<ul>
-		{#each expenseTypes as type}
-			<li>
-				<input bind:value={type.name} />
-				<button on:click={() => updateExpenseType(type)}>Update</button>
-				<button class="secondary" on:click={() => deleteExpenseType(type.id)}>Remove</button>
-			</li>
-		{/each}
-	</ul>
-</section>
+<div class="masters-grid">
+	<section class="panel master-card">
+		<div class="card-header">
+			<h2>Employees</h2>
+			<span class="count-badge">{employees.length}</span>
+		</div>
+		<div class="add-row">
+			<input placeholder="Add employee" bind:value={newEmployee} on:keydown={(e) => e.key === 'Enter' && addEmployee()} />
+			<button on:click={addEmployee} disabled={!newEmployee.trim()}>
+				<Icon name="plus" size={18} />
+			</button>
+		</div>
+		<ul class="master-list">
+			{#if employees.length === 0}
+				<EmptyState message="No employees added." icon="👤" />
+			{:else}
+				{#each employees as employee}
+					<li>
+						<input bind:value={employee.name} />
+						<div class="actions">
+							<button class="ghost" on:click={() => updateEmployee(employee)} title="Save">
+								<Icon name="save" size={16} />
+							</button>
+							<button class="ghost danger-text" on:click={() => requestDelete('employee', employee.name, employee.id, deleteEmployee)} title="Remove">
+								<Icon name="trash" size={16} />
+							</button>
+						</div>
+					</li>
+				{/each}
+			{/if}
+		</ul>
+	</section>
 
-<section class="panel">
-	<h2>Owners</h2>
-	<div class="row">
-		<input placeholder="Add owner" bind:value={newOwner} />
-		<button on:click={() => addOwner(newOwner)}>Add</button>
-	</div>
-	<ul>
-		{#each owners as owner}
-			<li>
-				<input bind:value={owner.name} />
-				<button on:click={() => updateOwner(owner)}>Update</button>
-				<button class="secondary" on:click={() => deleteOwner(owner.id)}>Remove</button>
-			</li>
-		{/each}
-	</ul>
-</section>
+	<section class="panel master-card">
+		<div class="card-header">
+			<h2>Expense Types</h2>
+			<span class="count-badge">{expenseTypes.length}</span>
+		</div>
+		<div class="add-row">
+			<input placeholder="Add expense type" bind:value={newExpenseType} on:keydown={(e) => e.key === 'Enter' && addExpenseType()} />
+			<button on:click={addExpenseType} disabled={!newExpenseType.trim()}>
+				<Icon name="plus" size={18} />
+			</button>
+		</div>
+		<ul class="master-list">
+			{#if expenseTypes.length === 0}
+				<EmptyState message="No expense types added." icon="🏷️" />
+			{:else}
+				{#each expenseTypes as type}
+					<li>
+						<input bind:value={type.name} />
+						<div class="actions">
+							<button class="ghost" on:click={() => updateExpenseType(type)} title="Save">
+								<Icon name="save" size={16} />
+							</button>
+							<button class="ghost danger-text" on:click={() => requestDelete('expense type', type.name, type.id, deleteExpenseType)} title="Remove">
+								<Icon name="trash" size={16} />
+							</button>
+						</div>
+					</li>
+				{/each}
+			{/if}
+		</ul>
+	</section>
+
+	<section class="panel master-card">
+		<div class="card-header">
+			<h2>Owners</h2>
+			<span class="count-badge">{owners.length}</span>
+		</div>
+		<div class="add-row">
+			<input placeholder="Add owner" bind:value={newOwner} on:keydown={(e) => e.key === 'Enter' && addOwner()} />
+			<button on:click={addOwner} disabled={!newOwner.trim()}>
+				<Icon name="plus" size={18} />
+			</button>
+		</div>
+		<ul class="master-list">
+			{#if owners.length === 0}
+				<EmptyState message="No owners added." icon="🏛️" />
+			{:else}
+				{#each owners as owner}
+					<li>
+						<input bind:value={owner.name} />
+						<div class="actions">
+							<button class="ghost" on:click={() => updateOwner(owner)} title="Save">
+								<Icon name="save" size={16} />
+							</button>
+							<button class="ghost danger-text" on:click={() => requestDelete('owner', owner.name, owner.id, deleteOwner)} title="Remove">
+								<Icon name="trash" size={16} />
+							</button>
+						</div>
+					</li>
+				{/each}
+			{/if}
+		</ul>
+	</section>
+</div>
 
 <style>
-	.panel {
-		background: var(--panel-bg);
-		border-radius: 16px;
-		padding: 20px;
-		box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-		margin-bottom: 20px;
+	.balance-panel {
+		border-left: 4px solid var(--accent);
 	}
 
-	.row {
+	.masters-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+		gap: 1.25rem;
+	}
+
+	.master-card {
+		padding: 1.25rem;
 		display: flex;
-		gap: 12px;
-		flex-wrap: wrap;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.card-header {
+		display: flex;
+		justify-content: space-between;
 		align-items: center;
 	}
 
-	.form-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-		gap: 16px;
-		margin-bottom: 16px;
-	}
-
-	input,
-	button {
-		padding: 10px 12px;
-		border-radius: 10px;
-		border: 1px solid var(--border);
-		font-size: 14px;
-		background: var(--input-bg);
-		color: var(--text);
-	}
-
-	button {
-		background: var(--primary-bg);
-		color: var(--primary-text);
-		cursor: pointer;
-		border: none;
-	}
-
-	button.secondary {
+	.count-badge {
+		padding: 0.25rem 0.65rem;
+		border-radius: 999px;
 		background: var(--secondary-bg);
-		color: var(--secondary-text);
-		border: 1px solid var(--border);
+		color: var(--muted);
+		font-size: 0.8rem;
+		font-weight: 800;
 	}
 
-	ul {
+	.add-row {
+		display: flex;
+		gap: 0.6rem;
+	}
+
+	.add-row input {
+		flex: 1;
+	}
+
+	.add-row button {
+		margin: 0;
+		padding: 0.7rem;
+	}
+
+	.master-list {
 		list-style: none;
 		padding: 0;
-		margin: 16px 0 0;
+		margin: 0;
 		display: grid;
-		gap: 10px;
+		gap: 0.7rem;
+		max-height: 420px;
+		overflow-y: auto;
 	}
 
-	li {
+	.master-list li {
 		display: grid;
-		grid-template-columns: 1fr auto auto;
-		gap: 10px;
+		grid-template-columns: 1fr auto;
+		gap: 0.6rem;
+		align-items: center;
+		padding: 0.5rem;
+		border-radius: var(--radius-md);
+		background: var(--card-bg);
+		border: 1px solid var(--border);
 	}
 
-	.muted {
-		color: var(--muted);
+	.master-list li input {
+		padding: 0.55rem 0.75rem;
+		border: 1px solid transparent;
+		background: transparent;
+	}
+
+	.master-list li input:focus {
+		background: var(--input-bg);
+		border-color: var(--border);
+	}
+
+	.actions {
+		display: flex;
+		gap: 0.25rem;
+	}
+
+	.actions button {
+		margin: 0;
+		padding: 0.5rem;
+	}
+
+	.danger-text {
+		color: var(--danger);
+	}
+
+	.danger-text:hover {
+		background: rgba(239, 68, 68, 0.08);
+	}
+
+	.shimmer-panel {
+		min-height: 80px;
+		display: grid;
+		gap: 0.75rem;
+		margin-bottom: 1.25rem;
+		padding: 1rem;
+		border-radius: var(--radius-md);
+		background: var(--card-bg);
+		border: 1px solid var(--border);
+	}
+
+	.shimmer-line {
+		height: 16px;
+		border-radius: 8px;
+		background: linear-gradient(90deg, var(--secondary-bg) 25%, rgba(255,255,255,0.4) 50%, var(--secondary-bg) 75%);
+		background-size: 200% 100%;
+		animation: shimmer 1.5s infinite;
+	}
+
+	@keyframes shimmer {
+		0% { background-position: 200% 0; }
+		100% { background-position: -200% 0; }
+	}
+
+	@media (max-width: 720px) {
+		.masters-grid {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

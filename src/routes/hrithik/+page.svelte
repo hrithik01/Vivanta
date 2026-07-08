@@ -2,6 +2,11 @@
 	// @ts-nocheck
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import Icon from '$lib/components/Icon.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
+	import { toast } from '$lib/stores/toast.js';
+	import { formatINR, formatShortDate } from '$lib/ui-utils.js';
 
 	const today = new Date().toISOString().slice(0, 10);
 	let selectedDate = today;
@@ -24,7 +29,9 @@
 		meaning_total: 'Settled'
 	};
 	let transactions = [];
-	let message = '';
+	let loading = true;
+	let savingOpening = false;
+	let submitting = false;
 	let editDrafts = {};
 	let editingId = null;
 
@@ -35,15 +42,8 @@
 		notes: ''
 	};
 
-	const formatINR = (value) =>
-		new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value || 0);
-
-	const formatShortDate = (value) => {
-		if (!value) return '';
-		const [year, month, day] = String(value).split('-');
-		if (!year || !month || !day) return value;
-		return `${day}-${month}-${year.slice(2)}`;
-	};
+	let confirmOpen = false;
+	let confirmId = null;
 
 	const loadBalance = async () => {
 		const res = await fetch('/api/hrithik/balance', { cache: 'no-store' });
@@ -72,7 +72,7 @@
 	};
 
 	const saveOpeningBalance = async () => {
-		message = '';
+		savingOpening = true;
 		const res = await fetch('/api/hrithik/balance', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -81,17 +81,23 @@
 				opening_online: openingOnlineInput
 			})
 		});
+		savingOpening = false;
 		if (res.ok) {
 			balance = await res.json();
-			message = 'Hrithik opening balances updated.';
+			toast.success('Opening balances updated.');
 		} else {
 			const error = await res.json();
-			message = error.error || 'Failed to update balance.';
+			toast.error(error.error || 'Failed to update balance.');
 		}
 	};
 
 	const submitTransaction = async () => {
-		message = '';
+		if (!form.amount || Number(form.amount) <= 0) {
+			toast.error('Please enter a valid amount greater than 0.');
+			return;
+		}
+
+		submitting = true;
 		const res = await fetch('/api/hrithik', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -103,25 +109,32 @@
 				notes: form.notes
 			})
 		});
+		submitting = false;
 
 		if (res.ok) {
 			form = { entry_type: 'expense', payment_type: 'cash', amount: '', notes: '' };
-			message = 'Hrithik transaction added.';
+			toast.success('Transaction added.');
 			await Promise.all([loadTransactions(), loadBalance()]);
 		} else {
 			const error = await res.json();
-			message = error.error || 'Failed to add transaction.';
+			toast.error(error.error || 'Failed to add transaction.');
 		}
 	};
 
-	const deleteTransaction = async (id) => {
-		message = '';
-		const res = await fetch(`/api/hrithik/${id}`, { method: 'DELETE' });
+	const requestDeleteTransaction = (id) => {
+		confirmId = id;
+		confirmOpen = true;
+	};
+
+	const deleteTransaction = async () => {
+		if (!confirmId) return;
+		const res = await fetch(`/api/hrithik/${confirmId}`, { method: 'DELETE' });
+		confirmId = null;
 		if (res.ok) {
-			message = 'Hrithik transaction deleted.';
+			toast.success('Transaction deleted.');
 			await Promise.all([loadTransactions(), loadBalance()]);
 		} else {
-			message = 'Failed to delete transaction.';
+			toast.error('Failed to delete transaction.');
 		}
 	};
 
@@ -134,8 +147,11 @@
 	};
 
 	const saveEdit = async (id) => {
-		message = '';
 		const draft = editDrafts[id];
+		if (!draft.amount || Number(draft.amount) <= 0) {
+			toast.error('Please enter a valid amount.');
+			return;
+		}
 		const res = await fetch(`/api/hrithik/${id}`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
@@ -144,57 +160,81 @@
 
 		if (res.ok) {
 			editingId = null;
-			message = 'Hrithik transaction updated.';
+			toast.success('Transaction updated.');
 			await Promise.all([loadTransactions(), loadBalance()]);
 		} else {
 			const error = await res.json();
-			message = error.error || 'Failed to update transaction.';
+			toast.error(error.error || 'Failed to update transaction.');
 		}
 	};
 
 	onMount(async () => {
+		loading = true;
 		await Promise.all([loadBalance(), loadTransactions()]);
+		loading = false;
 	});
 </script>
 
+<ConfirmModal
+	open={confirmOpen}
+	title="Delete Hrithik transaction?"
+	message="This will permanently remove this transaction."
+	confirmLabel="Delete"
+	cancelLabel="Cancel"
+	danger={true}
+	on:confirm={deleteTransaction}
+	on:cancel={() => (confirmOpen = false)}
+/>
+
 <section class="panel">
-	<h2>{$page.data.hotelName} Hrithik Ledger</h2>
-	<p class="muted">
-		This {$page.data.hotelName} Hrithik ledger is separate from the main income, expense, and
-		master balance sections.
-	</p>
+	<div class="row">
+		<div>
+			<h2>{$page.data.hotelName} Hrithik Ledger</h2>
+			<p class="muted">
+				This {$page.data.hotelName} Hrithik ledger is separate from the main income, expense, and
+				master balance sections.
+			</p>
+		</div>
+	</div>
+
 	<div class="grid">
-		<div class="card">
-			<h3>Hrithik Cash</h3>
+		<div class="card balance-card">
+			<div class="card-title">
+				<h3>Hrithik Cash</h3>
+				<span class="status-badge" class:positive={balance.meaning_cash === 'Settled'}>{balance.meaning_cash}</span>
+			</div>
 			<p class="big">{formatINR(balance.balance_cash)}</p>
-			<p class="muted">{balance.meaning_cash}</p>
-			<ul>
-				<li>Opening cash: {formatINR(balance.opening_cash)}</li>
-				<li>Cash income to Hrithik: {formatINR(balance.total_income_cash)}</li>
-				<li>Cash expense by Hrithik: {formatINR(balance.total_expense_cash)}</li>
+			<ul class="detail-list">
+				<li><span>Opening cash</span><strong>{formatINR(balance.opening_cash)}</strong></li>
+				<li><span>Cash income to Hrithik</span><strong>{formatINR(balance.total_income_cash)}</strong></li>
+				<li><span>Cash expense by Hrithik</span><strong>{formatINR(balance.total_expense_cash)}</strong></li>
 			</ul>
 		</div>
-		<div class="card">
-			<h3>Hrithik Online</h3>
+		<div class="card balance-card">
+			<div class="card-title">
+				<h3>Hrithik Online</h3>
+				<span class="status-badge" class:positive={balance.meaning_online === 'Settled'}>{balance.meaning_online}</span>
+			</div>
 			<p class="big">{formatINR(balance.balance_online)}</p>
-			<p class="muted">{balance.meaning_online}</p>
-			<ul>
-				<li>Opening online: {formatINR(balance.opening_online)}</li>
-				<li>Online income to Hrithik: {formatINR(balance.total_income_online)}</li>
-				<li>Online expense by Hrithik: {formatINR(balance.total_expense_online)}</li>
+			<ul class="detail-list">
+				<li><span>Opening online</span><strong>{formatINR(balance.opening_online)}</strong></li>
+				<li><span>Online income to Hrithik</span><strong>{formatINR(balance.total_income_online)}</strong></li>
+				<li><span>Online expense by Hrithik</span><strong>{formatINR(balance.total_expense_online)}</strong></li>
 			</ul>
 		</div>
-		<div class="card">
-			<h3>Hrithik Total</h3>
+		<div class="card balance-card total-card">
+			<div class="card-title">
+				<h3>Hrithik Total</h3>
+				<span class="status-badge" class:positive={balance.meaning_total === 'Settled'}>{balance.meaning_total}</span>
+			</div>
 			<p class="big">{formatINR(balance.balance_total)}</p>
-			<p class="muted">{balance.meaning_total}</p>
-			<ul>
-				<li>Total income: {formatINR(balance.total_income)}</li>
-				<li>Total expense: {formatINR(balance.total_expense)}</li>
-				<li>Cash + online total: {formatINR(balance.balance_total)}</li>
+			<ul class="detail-list">
+				<li><span>Total income</span><strong>{formatINR(balance.total_income)}</strong></li>
+				<li><span>Total expense</span><strong>{formatINR(balance.total_expense)}</strong></li>
+				<li><span>Cash + online total</span><strong>{formatINR(balance.balance_total)}</strong></li>
 			</ul>
 		</div>
-		<div class="card">
+		<div class="card opening-card">
 			<h3>Opening Balances</h3>
 			<label>
 				<span>Hrithik Cash Opening (INR)</span>
@@ -204,12 +244,15 @@
 				<span>Hrithik Online Opening (INR)</span>
 				<input type="number" step="1" bind:value={openingOnlineInput} />
 			</label>
-			<button on:click={saveOpeningBalance}>Save Opening Balances</button>
+			<button on:click={saveOpeningBalance} disabled={savingOpening}>
+				<Icon name="save" size={18} />
+				{savingOpening ? 'Saving…' : 'Save Opening Balances'}
+			</button>
 		</div>
 	</div>
 </section>
 
-<section class="panel">
+<section class="panel entry-panel">
 	<div class="row">
 		<div>
 			<h2>Hrithik Entry</h2>
@@ -218,7 +261,7 @@
 				should give to {$page.data.hotelName}.
 			</p>
 		</div>
-		<label>
+		<label class="date-label">
 			<span>Date</span>
 			<input type="date" bind:value={selectedDate} />
 		</label>
@@ -241,195 +284,264 @@
 		</label>
 		<label>
 			<span>Amount (INR)</span>
-			<input type="number" min="0" step="1" bind:value={form.amount} />
+			<input type="number" min="0" step="1" bind:value={form.amount} placeholder="0" />
 		</label>
 		<label class="wide">
 			<span>Notes</span>
 			<input type="text" placeholder="Optional notes" bind:value={form.notes} />
 		</label>
 	</div>
-	<button on:click={submitTransaction}>Add Entry</button>
-	{#if message}
-		<p class="muted">{message}</p>
-	{/if}
+	<button on:click={submitTransaction} disabled={submitting}>
+		<Icon name="plus" size={18} />
+		{submitting ? 'Adding…' : 'Add Entry'}
+	</button>
 </section>
 
 <section class="panel">
 	<h2>Latest 100 Hrithik Transactions</h2>
-	<table>
-		<thead>
-			<tr>
-				<th>Date</th>
-				<th>Type</th>
-				<th>Payment</th>
-				<th>Amount</th>
-				<th>Notes</th>
-				<th>Action</th>
-			</tr>
-		</thead>
-		<tbody>
-			{#if transactions.length === 0}
-				<tr>
-					<td colspan="6" class="muted">No Hrithik transactions recorded yet.</td>
-				</tr>
-			{:else}
-				{#each transactions as item}
+	{#if loading}
+		<div class="shimmer-panel" aria-label="Loading transactions">
+			<div class="shimmer-line" style="width: 100%;"></div>
+			<div class="shimmer-line" style="width: 80%;"></div>
+			<div class="shimmer-line" style="width: 90%;"></div>
+		</div>
+	{:else}
+		<div class="table-wrap">
+			<table>
+				<thead>
 					<tr>
-						<td>
-							{#if editingId === item.id}
-								<input type="date" bind:value={editDrafts[item.id].date} />
-							{:else}
-								{formatShortDate(item.date)}
-							{/if}
-						</td>
-						<td>
-							{#if editingId === item.id}
-								<select bind:value={editDrafts[item.id].entry_type}>
-									<option value="expense">Expense (subtract)</option>
-									<option value="income">Income (add)</option>
-								</select>
-							{:else}
-								{item.entry_type}
-							{/if}
-						</td>
-						<td>
-							{#if editingId === item.id}
-								<select bind:value={editDrafts[item.id].payment_type}>
-									<option value="cash">Cash</option>
-									<option value="online">Online</option>
-								</select>
-							{:else}
-								{item.payment_type}
-							{/if}
-						</td>
-						<td>
-							{#if editingId === item.id}
-								<input type="number" min="0" step="1" bind:value={editDrafts[item.id].amount} />
-							{:else}
-								{formatINR(item.amount)}
-							{/if}
-						</td>
-						<td>
-							{#if editingId === item.id}
-								<input type="text" bind:value={editDrafts[item.id].notes} />
-							{:else}
-								{item.notes || '-'}
-							{/if}
-						</td>
-						<td>
-							{#if editingId === item.id}
-								<button class="secondary" on:click={() => saveEdit(item.id)}>Save</button>
-								<button class="ghost" on:click={cancelEdit}>Cancel</button>
-							{:else}
-								<button class="secondary" on:click={() => startEdit(item)}>Edit</button>
-								<button class="secondary" on:click={() => deleteTransaction(item.id)}>Delete</button>
-							{/if}
-						</td>
+						<th>Date</th>
+						<th>Type</th>
+						<th>Payment</th>
+						<th>Amount</th>
+						<th>Notes</th>
+						<th class="action-cell">Action</th>
 					</tr>
-				{/each}
-			{/if}
-		</tbody>
-	</table>
+				</thead>
+				<tbody>
+					{#if transactions.length === 0}
+						<tr>
+							<td colspan="6">
+								<EmptyState message="No Hrithik transactions recorded yet." icon="📭" />
+							</td>
+						</tr>
+					{:else}
+						{#each transactions as item}
+							<tr class:editing={editingId === item.id}>
+								<td>
+									{#if editingId === item.id}
+										<input type="date" bind:value={editDrafts[item.id].date} />
+									{:else}
+										{formatShortDate(item.date)}
+									{/if}
+								</td>
+								<td>
+									{#if editingId === item.id}
+										<select bind:value={editDrafts[item.id].entry_type}>
+											<option value="expense">Expense (subtract)</option>
+											<option value="income">Income (add)</option>
+										</select>
+									{:else}
+										<span class="type-badge" class:expense={item.entry_type === 'expense'} class:income={item.entry_type === 'income'}>
+											{item.entry_type}
+										</span>
+									{/if}
+								</td>
+								<td>
+									{#if editingId === item.id}
+										<select bind:value={editDrafts[item.id].payment_type}>
+											<option value="cash">Cash</option>
+											<option value="online">Online</option>
+										</select>
+									{:else}
+										<span class="type-badge" class:cash={item.payment_type === 'cash'} class:online={item.payment_type === 'online'}>
+											{item.payment_type}
+										</span>
+									{/if}
+								</td>
+								<td>
+									{#if editingId === item.id}
+										<input type="number" min="0" step="1" bind:value={editDrafts[item.id].amount} />
+									{:else}
+										{formatINR(item.amount)}
+									{/if}
+								</td>
+								<td>
+									{#if editingId === item.id}
+										<input type="text" bind:value={editDrafts[item.id].notes} />
+									{:else}
+										{item.notes || '-'}
+									{/if}
+								</td>
+						<td class="action-cell">
+							{#if editingId === item.id}
+								<button class="secondary" on:click={() => saveEdit(item.id)}>
+									<Icon name="save" size={16} />
+								</button>
+								<button class="ghost" on:click={cancelEdit}>
+									<Icon name="close" size={16} />
+								</button>
+							{:else}
+								<button class="ghost" on:click={() => startEdit(item)} title="Edit">
+									<Icon name="edit" size={16} />
+								</button>
+								<button class="ghost danger-text" on:click={() => requestDeleteTransaction(item.id)} title="Delete">
+									<Icon name="trash" size={16} />
+								</button>
+							{/if}
+						</td>
+							</tr>
+						{/each}
+					{/if}
+				</tbody>
+			</table>
+		</div>
+	{/if}
 </section>
 
 <style>
-	.panel {
-		background: var(--panel-bg);
-		border-radius: 16px;
-		padding: 20px;
-		box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-		margin-bottom: 20px;
+	.entry-panel {
+		border-left: 4px solid var(--accent);
 	}
 
-	.row {
+	.date-label {
+		min-width: 180px;
+	}
+
+	.balance-card {
+		display: grid;
+		gap: 0.5rem;
+	}
+
+	.total-card {
+		background: linear-gradient(180deg, rgba(227, 193, 132, 0.15), var(--card-bg));
+	}
+
+	.card-title {
 		display: flex;
 		justify-content: space-between;
-		gap: 16px;
 		align-items: center;
-		flex-wrap: wrap;
+		gap: 0.5rem;
 	}
 
-	.grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-		gap: 16px;
-		margin-top: 12px;
-	}
-
-	.card {
-		background: var(--card-bg);
-		border-radius: 12px;
-		padding: 16px;
-		border: 1px solid var(--border);
-	}
-
-	.big {
-		font-size: 28px;
-		font-weight: 700;
-		margin: 8px 0;
-	}
-
-	.form-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: 16px;
-		margin-top: 16px;
-	}
-
-	label {
-		display: grid;
-		gap: 6px;
-		font-size: 14px;
+	.status-badge {
+		padding: 0.25rem 0.6rem;
+		border-radius: 999px;
+		font-size: 0.72rem;
+		font-weight: 800;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		background: var(--secondary-bg);
 		color: var(--muted);
 	}
 
-	label.wide {
-		grid-column: 1 / -1;
+	.status-badge.positive {
+		background: rgba(34, 197, 94, 0.12);
+		color: #15803d;
 	}
 
-	input,
-	select,
-	button {
-		padding: 10px 12px;
-		border-radius: 10px;
-		border: 1px solid var(--border);
-		background: var(--input-bg);
-		color: var(--text);
-		font-size: 14px;
+	.detail-list {
+		list-style: none;
+		padding: 0;
+		margin: 0.5rem 0 0;
+		display: grid;
+		gap: 0.45rem;
 	}
 
-	button {
-		background: var(--primary-bg);
-		color: var(--primary-text);
-		cursor: pointer;
-		border: none;
+	.detail-list li {
+		display: flex;
+		justify-content: space-between;
+		gap: 0.5rem;
+		font-size: 0.9rem;
+		padding-bottom: 0.4rem;
+		border-bottom: 1px solid var(--border);
 	}
 
-	button.secondary {
+	.detail-list li:last-child {
+		border-bottom: 0;
+		padding-bottom: 0;
+	}
+
+	.detail-list span {
+		color: var(--muted);
+	}
+
+	.opening-card {
+		display: grid;
+		gap: 0.75rem;
+	}
+
+	.opening-card h3 {
+		margin-bottom: 0.25rem;
+	}
+
+	.type-badge {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.35rem 0.7rem;
+		border-radius: 999px;
+		font-size: 0.8rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
 		background: var(--secondary-bg);
 		color: var(--secondary-text);
+	}
+
+	.type-badge.cash {
+		background: rgba(34, 197, 94, 0.12);
+		color: #15803d;
+	}
+
+	.type-badge.online {
+		background: rgba(59, 130, 246, 0.12);
+		color: #1d4ed8;
+	}
+
+	.type-badge.expense {
+		background: rgba(239, 68, 68, 0.12);
+		color: #b91c1c;
+	}
+
+	.type-badge.income {
+		background: rgba(34, 197, 94, 0.12);
+		color: #15803d;
+	}
+
+	tr.editing td {
+		background: rgba(227, 193, 132, 0.08);
+	}
+
+	.danger-text {
+		color: var(--danger);
+	}
+
+	.danger-text:hover {
+		background: rgba(239, 68, 68, 0.08);
+	}
+
+	.shimmer-panel {
+		min-height: 120px;
+		display: grid;
+		gap: 0.75rem;
+		padding: 1rem;
+		border-radius: var(--radius-md);
+		background: var(--card-bg);
 		border: 1px solid var(--border);
-		margin-right: 8px;
+		margin-top: 1rem;
 	}
 
-	button.ghost {
-		background: transparent;
-		color: var(--ghost-text);
-		border: 1px dashed var(--border);
+	.shimmer-line {
+		height: 16px;
+		border-radius: 8px;
+		background: linear-gradient(90deg, var(--secondary-bg) 25%, rgba(255,255,255,0.4) 50%, var(--secondary-bg) 75%);
+		background-size: 200% 100%;
+		animation: shimmer 1.5s infinite;
 	}
 
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		margin-top: 16px;
-	}
-
-	th,
-	td {
-		text-align: left;
-		padding: 10px;
-		border-bottom: 1px solid var(--border);
-		vertical-align: top;
+	@keyframes shimmer {
+		0% { background-position: 200% 0; }
+		100% { background-position: -200% 0; }
 	}
 
 	.muted {

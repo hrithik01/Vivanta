@@ -1,14 +1,19 @@
 <script>
 	// @ts-nocheck
 	import { onMount } from 'svelte';
+	import Icon from '$lib/components/Icon.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
+	import { toast } from '$lib/stores/toast.js';
+	import { formatINR, formatShortDate, formatDateInput } from '$lib/ui-utils.js';
 
 	const today = new Date().toISOString().slice(0, 10);
 	let selectedDate = today;
 	const dateRangeOptions = [
 		{ label: 'Last 1 week', value: '7d', days: 7 },
-		{ label: 'Last 2 week', value: '14d', days: 14 },
-		{ label: 'Last 3 week', value: '21d', days: 21 },
-		{ label: 'Last 4 week', value: '28d', days: 28 },
+		{ label: 'Last 2 weeks', value: '14d', days: 14 },
+		{ label: 'Last 3 weeks', value: '21d', days: 21 },
+		{ label: 'Last 4 weeks', value: '28d', days: 28 },
 		{ label: 'Last 2 months', value: '2m', months: 2 },
 		{ label: 'Last 6 months', value: '6m', months: 6 },
 		{ label: 'Last 12 months', value: '12m', months: 12 }
@@ -28,8 +33,9 @@
 	let selectedRoomFilter = 'all';
 	let showReference = false;
 	let showGroupBooking = false;
-	let showActions = false;
-	let incomeSummary = null;
+	let showActions = true;
+	let loading = true;
+	let submitting = false;
 	let form = {
 		room_number: '',
 		group_booking: '',
@@ -38,34 +44,12 @@
 		income_type: 'cash',
 		notes: ''
 	};
-	let message = '';
 
-	const formatINR = (value) =>
-		new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value || 0);
-
-	const formatShortDate = (value) => {
-		if (!value) return '';
-		const [year, month, day] = String(value).split('-');
-		if (!year || !month || !day) return value;
-		return `${day}-${month}-${year.slice(2)}`;
-	};
-
-	const formatDateInput = (value) => {
-		const date = new Date(value);
-		const year = date.getFullYear();
-		const month = String(date.getMonth() + 1).padStart(2, '0');
-		const day = String(date.getDate()).padStart(2, '0');
-		return `${year}-${month}-${day}`;
-	};
-
-	const clearIncomeSummary = () => {
-		incomeSummary = null;
-	};
+	let confirmOpen = false;
+	let confirmId = null;
 
 	const subtractMonths = (dateText, months) => {
-		const [year, month, day] = String(dateText)
-			.split('-')
-			.map(Number);
+		const [year, month, day] = String(dateText).split('-').map(Number);
 		const target = new Date(year, month - 1, 1);
 		target.setMonth(target.getMonth() - months);
 		const maxDayInTargetMonth = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
@@ -124,7 +108,6 @@
 				acc[item.id] = item.date;
 				return acc;
 			}, {});
-			clearIncomeSummary();
 		}
 	};
 
@@ -149,15 +132,17 @@
 		}
 	};
 
-	const showIncomeTotal = () => {
-		incomeSummary = {
-			count: filteredIncome.length,
-			amount: filteredIncome.reduce((sum, income) => sum + Number(income.amount || 0), 0)
-		};
-	};
-
 	const submitIncome = async () => {
-		message = '';
+		if (!form.amount || Number(form.amount) <= 0) {
+			toast.error('Please enter a valid amount greater than 0.');
+			return;
+		}
+		if (!form.room_number && !form.group_booking?.trim()) {
+			toast.error('Room number or group booking is required.');
+			return;
+		}
+
+		submitting = true;
 		const payload = {
 			date: selectedDate,
 			room_number: form.room_number || null,
@@ -172,31 +157,39 @@
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(payload)
 		});
+		submitting = false;
 		if (res.ok) {
-			message = 'Income added.';
+			toast.success('Income added successfully.');
 			applyIncomeDefaults(payload);
 			await loadIncome();
 		} else {
 			const error = await res.json();
-			message = error.error || 'Failed to add income.';
+			toast.error(error.error || 'Failed to add income.');
 		}
 	};
 
-	const deleteIncome = async (id) => {
-		message = '';
-		const res = await fetch(`/api/income/${id}`, { method: 'DELETE' });
+	const requestDeleteIncome = (id) => {
+		confirmId = id;
+		confirmOpen = true;
+	};
+
+	const deleteIncome = async () => {
+		if (!confirmId) return;
+		const res = await fetch(`/api/income/${confirmId}`, { method: 'DELETE' });
+		confirmId = null;
 		if (res.ok) {
-			message = 'Income deleted.';
+			toast.success('Income deleted.');
 			await loadIncome();
 		} else {
-			message = 'Failed to delete income.';
+			toast.error('Failed to delete income.');
 		}
 	};
 
 	const updateIncomeAmount = async (id) => {
-		message = '';
-		const confirmed = window.confirm('Confirm update amount?');
-		if (!confirmed) return;
+		if (!editAmounts[id] || Number(editAmounts[id]) <= 0) {
+			toast.error('Please enter a valid amount.');
+			return;
+		}
 		const res = await fetch(`/api/income/${id}`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
@@ -211,12 +204,12 @@
 			})
 		});
 		if (res.ok) {
-			message = 'Income updated.';
+			toast.success('Income updated.');
 			editingId = null;
 			await loadIncome();
 		} else {
 			const error = await res.json();
-			message = error.error || 'Failed to update income.';
+			toast.error(error.error || 'Failed to update income.');
 		}
 	};
 
@@ -236,9 +229,11 @@
 	};
 
 	onMount(async () => {
+		loading = true;
 		await loadRooms();
 		await loadLastIncomeEntry();
 		await loadIncome();
+		loading = false;
 	});
 
 	const onDateChange = async () => {
@@ -250,7 +245,7 @@
 	};
 
 	$: selectedRangeLabel =
-		dateRangeOptions.find((option) => option.value === selectedRangeValue)?.label || 'Last 2 week';
+		dateRangeOptions.find((option) => option.value === selectedRangeValue)?.label || 'Last 2 weeks';
 
 	$: filteredIncome = incomeList.filter((income) => {
 		const matchesType = incomeTypeFilter === 'all' || income.income_type === incomeTypeFilter;
@@ -263,15 +258,31 @@
 				: String(income.room_number || '') === String(selectedRoomFilter));
 		return matchesType && matchesRoom;
 	});
+
+	$: incomeSummary = {
+		count: filteredIncome.length,
+		amount: filteredIncome.reduce((sum, income) => sum + Number(income.amount || 0), 0)
+	};
 </script>
 
-<section class="panel">
+<ConfirmModal
+	open={confirmOpen}
+	title="Delete income entry?"
+	message="This will permanently remove the income record from the ledger."
+	confirmLabel="Delete"
+	cancelLabel="Cancel"
+	danger={true}
+	on:confirm={deleteIncome}
+	on:cancel={() => (confirmOpen = false)}
+/>
+
+<section class="panel entry-panel">
 	<div class="row">
 		<div>
 			<h2>Income Entry</h2>
 			<p class="muted">Room number or group booking is required.</p>
 		</div>
-		<label>
+		<label class="date-label">
 			<span>Date</span>
 			<input type="date" bind:value={selectedDate} on:change={onDateChange} />
 		</label>
@@ -298,12 +309,12 @@
 				<option value="Restaurant (Ext)">Restaurant (Ext)</option>
 				<option value="Food (Int)">Food (Int)</option>
 				<option value="Group Booking">Group Booking</option>
-				<option value="Miscelleanous">Miscelleanous</option>
+				<option value="Miscelleanous">Miscellaneous</option>
 			</select>
 		</label>
 		<label>
 			<span>Amount (INR)</span>
-			<input type="number" min="0" step="1" bind:value={form.amount} />
+			<input type="number" min="0" step="1" bind:value={form.amount} placeholder="0" />
 		</label>
 		<label>
 			<span>Income Type</span>
@@ -315,6 +326,7 @@
 					role="radio"
 					aria-checked={form.income_type === 'cash'}
 				>
+					<Icon name="hotel" size={16} />
 					Cash
 				</button>
 				<button
@@ -324,6 +336,7 @@
 					role="radio"
 					aria-checked={form.income_type === 'online'}
 				>
+					<Icon name="reports" size={16} />
 					Online
 				</button>
 			</div>
@@ -333,14 +346,24 @@
 			<input type="text" placeholder="Optional notes" bind:value={form.notes} />
 		</label>
 	</div>
-	<button on:click={submitIncome}>Add Income</button>
-	{#if message}
-		<p class="muted">{message}</p>
-	{/if}
+	<button on:click={submitIncome} disabled={submitting}>
+		<Icon name="plus" size={18} />
+		{submitting ? 'Adding…' : 'Add Income'}
+	</button>
 </section>
 
 <section class="panel">
-	<h2>Income ({selectedRangeLabel} ending {formatShortDate(selectedDate)})</h2>
+	<div class="row list-header">
+		<div>
+			<h2>Income ({selectedRangeLabel} ending {formatShortDate(selectedDate)})</h2>
+			<p class="muted">{incomeSummary.count} entries &middot; Total {formatINR(incomeSummary.amount)}</p>
+		</div>
+		<button class="ghost" on:click={() => (showActions = !showActions)}>
+			<Icon name={showActions ? 'close' : 'edit'} size={16} />
+			{showActions ? 'Hide actions' : 'Edit entries'}
+		</button>
+	</div>
+
 	<div class="filter-row">
 		<label>
 			<span>Date Range</span>
@@ -352,7 +375,7 @@
 		</label>
 		<label>
 			<span>Filter by Type</span>
-			<select bind:value={incomeTypeFilter} on:change={clearIncomeSummary}>
+			<select bind:value={incomeTypeFilter}>
 				<option value="all">All</option>
 				<option value="cash">Cash</option>
 				<option value="online">Online</option>
@@ -360,9 +383,9 @@
 		</label>
 		<label>
 			<span>Filter by Room</span>
-			<select bind:value={selectedRoomFilter} on:change={clearIncomeSummary}>
+			<select bind:value={selectedRoomFilter}>
 				<option value="all">All Rooms</option>
-				<option value="group-booking-only">Group Booking Only (No Room)</option>
+				<option value="group-booking-only">Group Booking Only</option>
 				{#each rooms as room}
 					<option value={room.room_number}>{room.room_number}</option>
 				{/each}
@@ -374,301 +397,175 @@
 		</label>
 		<label class="checkbox">
 			<input type="checkbox" bind:checked={showGroupBooking} />
-			<span>Show Group Booking</span>
-		</label>
-		<label class="checkbox">
-			<input type="checkbox" bind:checked={showActions} />
-			<span>Show Actions</span>
+			<span>Show Group</span>
 		</label>
 	</div>
-	<div class="summary-row">
-		<button class="secondary total-button" type="button" on:click={showIncomeTotal}>Total</button>
-		{#if incomeSummary}
-			<p class="muted">Entries: {incomeSummary.count} | Total Amount: <span class="amount-value">{formatINR(incomeSummary.amount)}</span></p>
-		{/if}
-	</div>
-	<table class="income-table">
-		<colgroup>
-			<col />
-			<col />
-			{#if showGroupBooking || editingId !== null}
-				<col />
-			{/if}
-			{#if showReference}
-				<col />
-			{/if}
-			<col />
-			<col />
-			<col class="notes-column" />
-			{#if showActions}
-				<col />
-			{/if}
-		</colgroup>
-		<thead>
-			<tr>
-				<th>Date</th>
-				<th>Room</th>
-				{#if showGroupBooking || editingId !== null}
-					<th>Group Booking</th>
-				{/if}
-				{#if showReference}
-					<th>Reference</th>
-				{/if}
-				<th>Type</th>
-				<th>Amount</th>
-				<th class="notes-column">Notes</th>
-				{#if showActions}
-					<th>Action</th>
-				{/if}
-			</tr>
-		</thead>
-		<tbody>
-			{#if filteredIncome.length === 0}
-				<tr>
-					<td
-						colspan={
-							6 +
-							(showReference ? 1 : 0) +
-							((showGroupBooking || editingId !== null) ? 1 : 0) +
-							(showActions ? 1 : 0)
-						}
-						class="muted"
-					>
-						No income recorded for this period.
-					</td>
-				</tr>
-			{:else}
-				{#each filteredIncome as income}
+
+	{#if loading}
+		<div class="shimmer-panel" aria-label="Loading income entries">
+			<div class="shimmer-line" style="width: 100%;"></div>
+			<div class="shimmer-line" style="width: 80%;"></div>
+			<div class="shimmer-line" style="width: 90%;"></div>
+		</div>
+	{:else}
+		<div class="table-wrap">
+			<table class="income-table">
+				<colgroup>
+					<col />
+					<col />
+					{#if showGroupBooking || editingId !== null}
+						<col />
+					{/if}
+					{#if showReference}
+						<col />
+					{/if}
+					<col />
+					<col />
+					<col class="notes-column" />
+					{#if showActions}
+						<col style="width: 110px;" />
+					{/if}
+				</colgroup>
+				<thead>
 					<tr>
-						<td>
-							{#if editingId === income.id}
-								<input type="date" bind:value={editDates[income.id]} />
-							{:else}
-								{formatShortDate(income.date)}
-							{/if}
-						</td>
-						<td>
-							{#if editingId === income.id}
-								<select bind:value={editRooms[income.id]}>
-									<option value="">Select room (optional)</option>
-									{#each rooms as room}
-										<option value={room.room_number}>{room.room_number}</option>
-									{/each}
-								</select>
-							{:else}
-								{income.room_number || '-'}
-							{/if}
-						</td>
-						{#if showGroupBooking || editingId === income.id}
-							<td>
-								{#if editingId === income.id}
-									<input type="text" placeholder="Enter group booking" bind:value={editGroupBookings[income.id]} />
-								{:else}
-									{income.group_booking || '-'}
-								{/if}
-							</td>
+						<th>Date</th>
+						<th>Room</th>
+						{#if showGroupBooking || editingId !== null}
+							<th>Group Booking</th>
 						{/if}
 						{#if showReference}
-							<td>
-								{#if editingId === income.id}
-									<select bind:value={editReferences[income.id]}>
-										<option value="Room tariff">Room tariff</option>
-										<option value="Restaurant (Ext)">Restaurant (Ext)</option>
-										<option value="Food (Int)">Food (Int)</option>
-										<option value="Group Booking">Group Booking</option>
-										<option value="Miscelleanous">Miscelleanous</option>
-									</select>
-								{:else}
-									{income.income_reference || '-'}
-								{/if}
-							</td>
+							<th>Reference</th>
 						{/if}
-						<td>
-							{#if editingId === income.id}
-								<select bind:value={editIncomeTypes[income.id]}>
-									<option value="cash">Cash</option>
-									<option value="online">Online</option>
-								</select>
-							{:else}
-								{income.income_type}
-							{/if}
-						</td>
-						<td>
-							{#if editingId === income.id}
-								<div class="inline">
-									<input type="number" min="0" step="1" bind:value={editAmounts[income.id]} />
-									<button class="secondary" on:click={() => updateIncomeAmount(income.id)}>Save</button>
-									<button class="ghost" on:click={cancelEdit}>Cancel</button>
-								</div>
-							{:else}
-								<span class="amount-value">{formatINR(income.amount)}</span>
-							{/if}
-						</td>
-						<td class="notes-cell">
-							{#if editingId === income.id}
-								<input type="text" placeholder="Optional notes" bind:value={editNotes[income.id]} />
-							{:else}
-								{income.notes || '-'}
-							{/if}
-						</td>
+						<th>Type</th>
+						<th>Amount</th>
+						<th class="notes-column">Notes</th>
 						{#if showActions}
-							<td>
-								<button class="secondary" on:click={() => startEdit(income)}>Edit</button>
-								<button class="secondary" on:click={() => deleteIncome(income.id)}>Delete</button>
-							</td>
+							<th>Action</th>
 						{/if}
 					</tr>
-				{/each}
-			{/if}
-		</tbody>
-	</table>
+				</thead>
+				<tbody>
+					{#if filteredIncome.length === 0}
+						<tr>
+							<td
+								colspan={
+									6 +
+									(showReference ? 1 : 0) +
+									((showGroupBooking || editingId !== null) ? 1 : 0) +
+									(showActions ? 1 : 0)
+								}
+							>
+								<EmptyState message="No income recorded for this period." icon="📭" />
+							</td>
+						</tr>
+					{:else}
+						{#each filteredIncome as income}
+							<tr class:editing={editingId === income.id}>
+								<td>
+									{#if editingId === income.id}
+										<input type="date" bind:value={editDates[income.id]} />
+									{:else}
+										{formatShortDate(income.date)}
+									{/if}
+								</td>
+								<td>
+									{#if editingId === income.id}
+										<select bind:value={editRooms[income.id]}>
+											<option value="">Select room</option>
+											{#each rooms as room}
+												<option value={room.room_number}>{room.room_number}</option>
+											{/each}
+										</select>
+									{:else}
+										{income.room_number || '-'}
+									{/if}
+								</td>
+								{#if showGroupBooking || editingId === income.id}
+									<td>
+										{#if editingId === income.id}
+											<input type="text" placeholder="Enter group booking" bind:value={editGroupBookings[income.id]} />
+										{:else}
+											{income.group_booking || '-'}
+										{/if}
+									</td>
+								{/if}
+								{#if showReference}
+									<td>
+										{#if editingId === income.id}
+											<select bind:value={editReferences[income.id]}>
+												<option value="Room tariff">Room tariff</option>
+												<option value="Restaurant (Ext)">Restaurant (Ext)</option>
+												<option value="Food (Int)">Food (Int)</option>
+												<option value="Group Booking">Group Booking</option>
+												<option value="Miscelleanous">Miscellaneous</option>
+											</select>
+										{:else}
+											{income.income_reference || '-'}
+										{/if}
+									</td>
+								{/if}
+								<td>
+									{#if editingId === income.id}
+										<select bind:value={editIncomeTypes[income.id]}>
+											<option value="cash">Cash</option>
+											<option value="online">Online</option>
+										</select>
+									{:else}
+										<span class="type-badge" class:cash={income.income_type === 'cash'} class:online={income.income_type === 'online'}>
+											{income.income_type}
+										</span>
+									{/if}
+								</td>
+								<td>
+									{#if editingId === income.id}
+										<div class="inline">
+											<input type="number" min="0" step="1" bind:value={editAmounts[income.id]} />
+											<button class="secondary" on:click={() => updateIncomeAmount(income.id)}>
+												<Icon name="save" size={16} />
+											</button>
+											<button class="ghost" on:click={cancelEdit}>
+												<Icon name="close" size={16} />
+											</button>
+										</div>
+									{:else}
+										<span class="amount-value">{formatINR(income.amount)}</span>
+									{/if}
+								</td>
+								<td class="notes-cell">
+									{#if editingId === income.id}
+										<input type="text" placeholder="Optional notes" bind:value={editNotes[income.id]} />
+									{:else}
+										{income.notes || '-'}
+									{/if}
+								</td>
+								{#if showActions}
+									<td class="action-cell">
+										{#if editingId !== income.id}
+											<button class="ghost" on:click={() => startEdit(income)} title="Edit">
+												<Icon name="edit" size={16} />
+											</button>
+											<button class="ghost danger-text" on:click={() => requestDeleteIncome(income.id)} title="Delete">
+												<Icon name="trash" size={16} />
+											</button>
+										{/if}
+									</td>
+								{/if}
+							</tr>
+						{/each}
+					{/if}
+				</tbody>
+			</table>
+		</div>
+	{/if}
 </section>
 
 <style>
-	.panel {
-		background: var(--panel-bg);
-		border-radius: 16px;
-		padding: 20px;
-		box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-		margin-bottom: 20px;
+	.entry-panel {
+		border-left: 4px solid var(--success);
 	}
 
-	.row {
-		display: flex;
-		justify-content: space-between;
-		gap: 16px;
-		align-items: center;
-		flex-wrap: wrap;
-	}
-
-	.form-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: 16px;
-		margin-top: 16px;
-	}
-
-	label {
-		display: grid;
-		gap: 6px;
-		font-size: 14px;
-		color: var(--muted);
-	}
-
-	label.wide {
-		grid-column: 1 / -1;
-	}
-
-	input,
-	select,
-	button {
-		padding: 10px 12px;
-		border-radius: 10px;
-		border: 1px solid var(--border);
-		font-size: 14px;
-		background: var(--input-bg);
-		color: var(--text);
-	}
-
-	button {
-		background: var(--primary-bg);
-		color: var(--primary-text);
-		cursor: pointer;
-		border: none;
-		margin-top: 16px;
-	}
-
-	button.secondary {
-		background: var(--secondary-bg);
-		color: var(--secondary-text);
-		border: 1px solid var(--border);
-		margin-top: 0;
-	}
-
-	button.ghost {
-		background: transparent;
-		color: var(--ghost-text);
-		border: 1px dashed var(--border);
-		margin-top: 0;
-	}
-
-	.inline {
-		display: flex;
-		gap: 8px;
-		align-items: center;
-	}
-
-	.filter-row {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 16px;
-		margin: 12px 0 8px;
-		flex-wrap: wrap;
-	}
-
-	.summary-row {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		margin: 8px 0 0;
-		flex-wrap: wrap;
-	}
-
-	.total-button {
-		min-width: 96px;
-	}
-
-	label.checkbox {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		color: var(--text);
-	}
-
-	label.checkbox input {
-		width: 16px;
-		height: 16px;
-		padding: 0;
-	}
-
-	.muted {
-		color: var(--muted);
-	}
-
-	.amount-value {
-		font-weight: 700;
-	}
-
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		margin-top: 16px;
-	}
-
-	.income-table {
-		table-layout: fixed;
-	}
-
-	.income-table .notes-column {
-		width: 40%;
-	}
-
-	th,
-	td {
-		padding: 10px;
-		border-bottom: 1px solid var(--border);
-		text-align: left;
-	}
-
-	.notes-cell {
-		width: 40%;
-		white-space: normal;
-	}
-
-	.notes-cell input {
-		width: 100%;
-		box-sizing: border-box;
+	.date-label {
+		min-width: 180px;
 	}
 
 	.tile-group {
@@ -689,5 +586,134 @@
 		background: var(--primary-bg);
 		color: var(--primary-text);
 		border-color: transparent;
+	}
+
+	.list-header {
+		margin-bottom: 0.5rem;
+	}
+
+	.filter-row {
+		display: flex;
+		justify-content: flex-start;
+		align-items: flex-end;
+		gap: 16px;
+		margin: 12px 0 8px;
+		flex-wrap: wrap;
+	}
+
+	.inline {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+	}
+
+	.inline input {
+		min-width: 100px;
+	}
+
+	label.checkbox {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		color: var(--text);
+	}
+
+	label.checkbox input {
+		width: 18px;
+		height: 18px;
+		padding: 0;
+	}
+
+	.muted {
+		color: var(--muted);
+	}
+
+	.amount-value {
+		font-weight: 700;
+	}
+
+	.income-table {
+		table-layout: fixed;
+	}
+
+	.income-table .notes-column {
+		width: 35%;
+	}
+
+	.notes-cell {
+		white-space: normal;
+	}
+
+	.notes-cell input {
+		width: 100%;
+		box-sizing: border-box;
+	}
+
+	.type-badge {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.35rem 0.7rem;
+		border-radius: 999px;
+		font-size: 0.8rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		background: var(--secondary-bg);
+		color: var(--secondary-text);
+	}
+
+	.type-badge.cash {
+		background: rgba(34, 197, 94, 0.12);
+		color: #15803d;
+	}
+
+	.type-badge.online {
+		background: rgba(59, 130, 246, 0.12);
+		color: #1d4ed8;
+	}
+
+	tr.editing td {
+		background: rgba(227, 193, 132, 0.08);
+	}
+
+	.danger-text {
+		color: var(--danger);
+	}
+
+	.danger-text:hover {
+		background: rgba(239, 68, 68, 0.08);
+	}
+
+	.shimmer-panel {
+		min-height: 120px;
+		display: grid;
+		gap: 0.75rem;
+		padding: 1rem;
+		border-radius: var(--radius-md);
+		background: var(--card-bg);
+		border: 1px solid var(--border);
+	}
+
+	.shimmer-line {
+		height: 16px;
+		border-radius: 8px;
+		background: linear-gradient(90deg, var(--secondary-bg) 25%, rgba(255,255,255,0.4) 50%, var(--secondary-bg) 75%);
+		background-size: 200% 100%;
+		animation: shimmer 1.5s infinite;
+	}
+
+	@keyframes shimmer {
+		0% { background-position: 200% 0; }
+		100% { background-position: -200% 0; }
+	}
+
+	@media (max-width: 720px) {
+		.filter-row {
+			gap: 12px;
+		}
+
+		.filter-row label {
+			flex: 1 1 160px;
+		}
 	}
 </style>

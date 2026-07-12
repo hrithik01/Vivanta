@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'fs';
 import path from 'path';
-import { DEFAULT_HOTEL, HOTEL_DEFINITIONS, normalizeHotel } from '$lib/server/hotel.js';
+import { DEFAULT_HOTEL, getHotelDefinition, normalizeHotel } from '$lib/server/hotel.js';
 
 const dataDir = path.resolve('data');
 if (!fs.existsSync(dataDir)) {
@@ -21,6 +21,11 @@ CREATE TABLE IF NOT EXISTS employees (
 );
 
 CREATE TABLE IF NOT EXISTS expense_types (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS income_types (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	name TEXT NOT NULL UNIQUE
 );
@@ -196,11 +201,11 @@ const migrateExpensePaymentTypes = (db) => {
 	db.exec('PRAGMA foreign_keys = ON;');
 };
 
-const seedEmployees = ['Harish', 'Raju', 'Khemraj', 'Dilip'];
+const seedEmployees = ['Front Desk', 'Housekeeping'];
 const seedExpenseTypes = [
 	'Employee',
 	'Cleaning equipment',
-	'Laundary',
+	'Laundry',
 	'Restaurant',
 	'Coffee',
 	'Miscellaneous',
@@ -208,7 +213,8 @@ const seedExpenseTypes = [
 	'Electricity',
 	'Owner payout'
 ];
-const seedOwners = ['Hrithik', 'Hemant', 'Praveen'];
+const seedIncomeTypes = ['Room tariff', 'Restaurant (Ext)', 'Food (Int)', 'Group Booking', 'Miscellaneous'];
+const seedOwners = [];
 
 const insertIfEmpty = (db, table, values) => {
 	const count = db.prepare(`SELECT COUNT(*) as count FROM ${table}`).get().count;
@@ -222,12 +228,13 @@ const insertIfEmpty = (db, table, values) => {
 };
 
 const initializeDb = (hotelId) => {
-	const hotel = HOTEL_DEFINITIONS[hotelId] || HOTEL_DEFINITIONS[DEFAULT_HOTEL];
+	const hotel = getHotelDefinition(hotelId) || getHotelDefinition(DEFAULT_HOTEL);
 	const db = new Database(path.join(dataDir, hotel.dbFile));
 	db.pragma('journal_mode = WAL');
 	db.exec(schema);
 
 	ensureColumn(db, 'income', 'income_reference', 'TEXT NOT NULL DEFAULT "Room tariff"');
+	ensureColumn(db, 'daily_room_summary', 'room_data_json', 'TEXT NOT NULL DEFAULT "{}"');
 	ensureColumn(db, 'settings', 'todos_json', 'TEXT NOT NULL DEFAULT "[]"');
 	ensureColumn(db, 'settings', 'pending_bills_json', 'TEXT NOT NULL DEFAULT "[]"');
 	ensureColumn(db, 'hrithik_transactions', 'payment_type', 'TEXT NOT NULL DEFAULT "cash" CHECK (payment_type IN (\'cash\', \'online\'))');
@@ -238,6 +245,13 @@ const initializeDb = (hotelId) => {
 	insertIfEmpty(db, 'rooms', hotel.rooms);
 	insertIfEmpty(db, 'employees', seedEmployees);
 	insertIfEmpty(db, 'expense_types', seedExpenseTypes);
+	insertIfEmpty(db, 'income_types', seedIncomeTypes);
+	// Preserve legacy custom/typo references so existing entries remain editable.
+	db.prepare(
+		`INSERT OR IGNORE INTO income_types (name)
+		 SELECT DISTINCT income_reference FROM income
+		 WHERE income_reference IS NOT NULL AND TRIM(income_reference) != ''`
+	).run();
 	insertIfEmpty(db, 'owners', seedOwners);
 
 	db.prepare('INSERT OR IGNORE INTO settings (id, master_cash_start, master_online_start) VALUES (1, 0, 0)').run();

@@ -55,6 +55,7 @@ API endpoints are under `src/routes/api/*` and include:
 - Active hotel is resolved server-side via cookie
 - Context is applied per request using async local storage
 - Enables multi-hotel operation without mixing ledger data
+- Hotel profiles are persisted in `data/hotels.json` and can be created from the app
 
 ## Tech Stack
 
@@ -126,11 +127,13 @@ If your target platform requires configuration via environment (for paths, stora
 
 ## Configuration Notes for Generic Hotel Use
 
-To adapt this project for any hotel:
+Use the hotel selector in the header and choose **Create hotel**. The setup flow accepts the
+property name, room inventory, employees, owners, income types, expense types, and opening
+balances. These masters remain editable from the **Masters** page after setup.
 
-- Update hotel definitions and room inventory in `src/lib/server/hotel.js`
-- Adjust default seeded employees, owners, and expense types in `src/lib/server/db.js`
-- Keep names and references generic if you are deploying for multiple clients
+Vivanta and BlueMoon are retained as migrated profiles pointing to their existing database
+files, so their current entries are not moved or renamed. New hotels receive a separate SQLite
+database and cannot mix entries with another selected property.
 
 ## Typical Use Cases
 

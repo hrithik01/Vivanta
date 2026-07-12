@@ -21,6 +21,7 @@ Thumbs.db
 *.db
 *.db-shm
 *.db-wal
+/data/hotels.json
 .github
 
 # Vite

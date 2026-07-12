@@ -4,7 +4,7 @@ declare global {
 	namespace App {
 		// interface Error {}
 		interface Locals {
-			hotel: 'vivanta' | 'bluemoon';
+			hotel: string;
 		}
 		// interface PageData {}
 		// interface PageState {}

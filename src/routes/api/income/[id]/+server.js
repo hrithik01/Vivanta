@@ -9,16 +9,8 @@ export const PUT = async ({ params, request }) => {
 	if (!numericAmount || numericAmount <= 0) {
 		return json({ error: 'Amount must be greater than zero.' }, { status: 400 });
 	}
-	const allowedReferences = [
-		'Room tariff',
-		'Restaurant (Ext)',
-		'Food (Int)',
-		'Group Booking',
-		'Miscelleanous'
-	];
-	if (!income_reference || !allowedReferences.includes(income_reference)) {
-		return json({ error: 'Income reference is required.' }, { status: 400 });
-	}
+	const referenceExists = income_reference && db.prepare('SELECT 1 FROM income_types WHERE name = ?').get(income_reference);
+	if (!referenceExists) return json({ error: 'Income reference is required.' }, { status: 400 });
 	if (!date) {
 		return json({ error: 'Date is required.' }, { status: 400 });
 	}

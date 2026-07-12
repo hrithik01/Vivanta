@@ -3,8 +3,8 @@ import { json } from '@sveltejs/kit';
 
 /** @param {number} value */
 const getMeaning = (value) => {
-	if (value < 0) return 'Hrithik to take from hotel';
-	if (value > 0) return 'Hrithik to give to hotel';
+	if (value < 0) return 'Personal balance to receive';
+	if (value > 0) return 'Personal balance to settle';
 	return 'Settled';
 };
 

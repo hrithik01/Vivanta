@@ -20,6 +20,7 @@
 	];
 	let selectedRangeValue = '14d';
 	let rooms = [];
+	let incomeTypes = [];
 	let incomeList = [];
 	let editAmounts = {};
 	let editNotes = {};
@@ -73,6 +74,16 @@
 		if (res.ok) rooms = await res.json();
 	};
 
+	const loadIncomeTypes = async () => {
+		const res = await fetch('/api/income-types');
+		if (res.ok) {
+			incomeTypes = await res.json();
+			if (!incomeTypes.some((type) => type.name === form.income_reference)) {
+				form.income_reference = incomeTypes[0]?.name || '';
+			}
+		}
+	};
+
 	const loadIncome = async () => {
 		const selectedRange =
 			dateRangeOptions.find((option) => option.value === selectedRangeValue) || dateRangeOptions[1];
@@ -116,7 +127,7 @@
 		form = {
 			room_number: income.room_number || '',
 			group_booking: '',
-			income_reference: income.income_reference || 'Room tariff',
+			income_reference: income.income_reference || incomeTypes[0]?.name || 'Room tariff',
 			amount: '',
 			income_type: income.income_type || 'cash',
 			notes: ''
@@ -230,7 +241,7 @@
 
 	onMount(async () => {
 		loading = true;
-		await loadRooms();
+		await Promise.all([loadRooms(), loadIncomeTypes()]);
 		await loadLastIncomeEntry();
 		await loadIncome();
 		loading = false;
@@ -305,11 +316,9 @@
 		<label>
 			<span>Income Reference</span>
 			<select bind:value={form.income_reference}>
-				<option value="Room tariff">Room tariff</option>
-				<option value="Restaurant (Ext)">Restaurant (Ext)</option>
-				<option value="Food (Int)">Food (Int)</option>
-				<option value="Group Booking">Group Booking</option>
-				<option value="Miscelleanous">Miscellaneous</option>
+				{#each incomeTypes as type}
+					<option value={type.name}>{type.name === 'Miscelleanous' ? 'Miscellaneous' : type.name}</option>
+				{/each}
 			</select>
 		</label>
 		<label>
@@ -492,12 +501,10 @@
 								{#if showReference}
 									<td>
 										{#if editingId === income.id}
-											<select bind:value={editReferences[income.id]}>
-												<option value="Room tariff">Room tariff</option>
-												<option value="Restaurant (Ext)">Restaurant (Ext)</option>
-												<option value="Food (Int)">Food (Int)</option>
-												<option value="Group Booking">Group Booking</option>
-												<option value="Miscelleanous">Miscellaneous</option>
+							<select bind:value={editReferences[income.id]}>
+								{#each incomeTypes as type}
+									<option value={type.name}>{type.name === 'Miscelleanous' ? 'Miscellaneous' : type.name}</option>
+								{/each}
 											</select>
 										{:else}
 											{income.income_reference || '-'}

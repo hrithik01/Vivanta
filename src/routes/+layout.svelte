@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import Icon from '$lib/components/Icon.svelte';
 	import Toast from '$lib/components/Toast.svelte';
+	import { toast } from '$lib/stores/toast.js';
 
 	export let data;
 
@@ -11,7 +12,7 @@
 		{ href: '/income', label: 'Income', icon: 'income' },
 		{ href: '/expenses', label: 'Expenses', icon: 'expenses' },
 		{ href: '/masters', label: 'Masters', icon: 'masters' },
-		{ href: '/hrithik', label: 'Hrithik', icon: 'hotel' },
+		{ href: '/hrithik', label: 'Personal Ledger', icon: 'hotel' },
 		{ href: '/reports', label: 'Reports', icon: 'reports' }
 	];
 
@@ -19,6 +20,18 @@
 	let selectedHotel = data.hotel;
 	let mobileMenuOpen = false;
 	let navHint = true;
+	let createHotelOpen = false;
+	let creatingHotel = false;
+	let hotelForm = {
+		name: '',
+		rooms: '',
+		employees: '',
+		owners: '',
+		incomeTypes: 'Room tariff\nRestaurant (Ext)\nFood (Int)\nGroup Booking\nMiscellaneous',
+		expenseTypes: 'Employee\nCleaning equipment\nLaundry\nRestaurant\nCoffee\nMiscellaneous\nWifi\nElectricity\nOwner payout',
+		masterCashStart: 0,
+		masterOnlineStart: 0
+	};
 
 	/** @param {string} value */
 	const applyTheme = (value) => {
@@ -47,6 +60,53 @@
 
 	const closeMobileMenu = () => {
 		mobileMenuOpen = false;
+	};
+
+	const openCreateHotel = () => {
+		hotelForm = {
+			name: '',
+			rooms: '',
+			employees: '',
+			owners: '',
+			incomeTypes: 'Room tariff\nRestaurant (Ext)\nFood (Int)\nGroup Booking\nMiscellaneous',
+			expenseTypes: 'Employee\nCleaning equipment\nLaundry\nRestaurant\nCoffee\nMiscellaneous\nWifi\nElectricity\nOwner payout',
+			masterCashStart: 0,
+			masterOnlineStart: 0
+		};
+		createHotelOpen = true;
+	};
+
+	/** @param {unknown} value */
+	const parseList = (value) => String(value || '').split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
+
+	const submitCreateHotel = async () => {
+		if (!hotelForm.name.trim()) {
+			toast.error('Hotel name is required.');
+			return;
+		}
+		creatingHotel = true;
+		const res = await fetch('/api/hotel', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				name: hotelForm.name,
+				rooms: parseList(hotelForm.rooms),
+				employees: parseList(hotelForm.employees),
+				owners: parseList(hotelForm.owners),
+				income_types: parseList(hotelForm.incomeTypes),
+				expense_types: parseList(hotelForm.expenseTypes),
+				master_cash_start: hotelForm.masterCashStart,
+				master_online_start: hotelForm.masterOnlineStart
+			})
+		});
+		creatingHotel = false;
+		if (res.ok) {
+			toast.success('Hotel created.');
+			window.location.reload();
+		} else {
+			const error = await res.json().catch(() => ({}));
+			toast.error(error.error || 'Unable to create hotel.');
+		}
 	};
 
 	onMount(() => {
@@ -94,6 +154,10 @@
 						{/each}
 					</select>
 				</div>
+				<button class="ghost create-hotel-button" on:click={openCreateHotel}>
+					<Icon name="plus" size={15} />
+					Create hotel
+				</button>
 			</div>
 
 			<button
@@ -116,6 +180,35 @@
 			</button>
 		</div>
 	</header>
+
+	{#if createHotelOpen}
+		<div class="modal-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && (createHotelOpen = false)}>
+			<dialog open class="setup-modal panel-shell" aria-labelledby="setup-title">
+				<div class="row">
+					<div>
+						<p class="brand-eyebrow">Property setup</p>
+						<h2 id="setup-title">Create a hotel</h2>
+						<p class="muted">Set up the property once. Everything can be edited later from Masters.</p>
+					</div>
+					<button class="ghost" on:click={() => (createHotelOpen = false)} aria-label="Close setup">Close</button>
+				</div>
+				<div class="setup-grid">
+					<label class="wide"><span>Hotel name</span><input placeholder="e.g. The Riverside Hotel" bind:value={hotelForm.name} /></label>
+					<label><span>Room numbers</span><textarea rows="5" placeholder="One per line or comma separated" bind:value={hotelForm.rooms}></textarea></label>
+					<label><span>Employees</span><textarea rows="5" placeholder="One per line or comma separated" bind:value={hotelForm.employees}></textarea></label>
+					<label><span>Owners</span><textarea rows="5" placeholder="One per line or comma separated" bind:value={hotelForm.owners}></textarea></label>
+					<label><span>Income types</span><textarea rows="5" bind:value={hotelForm.incomeTypes}></textarea></label>
+					<label><span>Expense types</span><textarea rows="5" bind:value={hotelForm.expenseTypes}></textarea></label>
+					<label><span>Starting cash (INR)</span><input type="number" min="0" bind:value={hotelForm.masterCashStart} /></label>
+					<label><span>Starting online (INR)</span><input type="number" min="0" bind:value={hotelForm.masterOnlineStart} /></label>
+				</div>
+				<div class="modal-actions">
+					<button class="secondary-button" on:click={() => (createHotelOpen = false)}>Cancel</button>
+					<button on:click={submitCreateHotel} disabled={creatingHotel}>{creatingHotel ? 'Creating…' : 'Create hotel ledger'}</button>
+				</div>
+			</dialog>
+		</div>
+	{/if}
 
 	<nav
 		class="main-nav"
@@ -664,6 +757,70 @@
 
 	.hotel-switcher {
 		min-width: 200px;
+	}
+
+	.create-hotel-button {
+		margin-top: 0.45rem;
+		padding: 0.46rem 0.72rem;
+		font-size: 0.78rem;
+	}
+
+	.modal-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 20;
+		display: grid;
+		place-items: center;
+		padding: 1rem;
+		background: rgba(8, 25, 20, 0.45);
+		backdrop-filter: blur(8px);
+	}
+
+	.setup-modal {
+		position: static;
+		width: min(760px, 100%);
+		max-height: calc(100vh - 2rem);
+		overflow: auto;
+		padding: 1.4rem;
+		border: 0;
+		margin: 0;
+		border-radius: var(--radius-lg);
+		background: var(--panel-bg);
+		box-shadow: var(--panel-shadow);
+	}
+
+	.setup-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 1rem;
+		margin-top: 1.25rem;
+	}
+
+	.setup-grid label {
+		display: grid;
+		gap: 0.4rem;
+		font-weight: 700;
+		font-size: 0.86rem;
+	}
+
+	.setup-grid .wide {
+		grid-column: 1 / -1;
+	}
+
+	.modal-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.65rem;
+		margin-top: 1.25rem;
+	}
+
+	@media (max-width: 680px) {
+		.setup-grid {
+			grid-template-columns: 1fr;
+		}
+		.setup-grid .wide {
+			grid-column: auto;
+		}
 	}
 
 	.hotel-switcher label span {

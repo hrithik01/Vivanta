@@ -39,16 +39,8 @@ export const GET = ({ url }) => {
 
 export const POST = async ({ request }) => {
 	const { date, room_number, group_booking, income_reference, amount, income_type, notes } = await request.json();
-		const allowedReferences = [
-			'Room tariff',
-			'Restaurant (Ext)',
-			'Food (Int)',
-			'Group Booking',
-			'Miscelleanous'
-		];
-		if (!income_reference || !allowedReferences.includes(income_reference)) {
-			return json({ error: 'Income reference is required.' }, { status: 400 });
-		}
+	const referenceExists = income_reference && db.prepare('SELECT 1 FROM income_types WHERE name = ?').get(income_reference);
+	if (!referenceExists) return json({ error: 'Income reference is required.' }, { status: 400 });
 	if (!date) {
 		return json({ error: 'Date is required.' }, { status: 400 });
 	}

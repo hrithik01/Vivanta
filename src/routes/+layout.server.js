@@ -1,14 +1,14 @@
-import { DEFAULT_HOTEL, HOTEL_DEFINITIONS, HOTEL_OPTIONS, normalizeHotel } from '$lib/server/hotel.js';
+import { DEFAULT_HOTEL, getHotelDefinition, getHotelOptions, normalizeHotel } from '$lib/server/hotel.js';
 
 export const load = ({ locals }) => {
 	const hotel = normalizeHotel(locals.hotel || DEFAULT_HOTEL);
-	const hotelDefinition = HOTEL_DEFINITIONS[hotel];
+	const hotelDefinition = getHotelDefinition(hotel);
 
 	return {
 		hotel,
-		hotels: HOTEL_OPTIONS,
+		hotels: getHotelOptions(),
 		hotelName: hotelDefinition.label,
-		hotelDisplayName: hotelDefinition.displayName,
+		hotelDisplayName: `${hotelDefinition.label} Ledger`,
 		hotelDescription: hotelDefinition.description
 	};
 };

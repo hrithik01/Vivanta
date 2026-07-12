@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 	import { toast } from '$lib/stores/toast.js';
 	import { formatINR } from '$lib/ui-utils.js';
 
@@ -18,7 +19,6 @@
 	};
 	let masterBalances = { master_cash_balance: 0, master_online_balance: 0 };
 	let roomSummary = [];
-	let roomNotes = {};
 	let roomMessage = '';
 	let roomSummaryDate = null;
 	let todos = [];
@@ -33,6 +33,8 @@
 	let billDraftDone = false;
 	let loading = true;
 	let savingRoom = null;
+	let clearingRoomSummary = false;
+	let clearRoomSummaryOpen = false;
 	let savingBoard = false;
 
 	const MS_IN_DAY = 24 * 60 * 60 * 1000;
@@ -97,10 +99,6 @@
 			const data = await res.json();
 			roomSummaryDate = data.date;
 			roomSummary = data.rooms || [];
-			roomNotes = roomSummary.reduce((acc, item) => {
-				acc[item.room_number] = item.notes || '';
-				return acc;
-			}, {});
 		}
 	};
 
@@ -144,25 +142,54 @@
 		loading = false;
 	};
 
-	const saveRoomNote = async (roomNumber) => {
+	const saveRoomSummary = async (room) => {
 		roomMessage = '';
-		savingRoom = roomNumber;
+		savingRoom = room.room_number;
 		const res = await fetch('/api/daily-room-summary', {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
-				room_number: roomNumber,
-				notes: roomNotes[roomNumber] || ''
+				room_number: room.room_number,
+				notes: room.notes || '',
+				check_in_date: room.check_in_date || '',
+				tariff_per_day: room.tariff_per_day ?? '',
+				amount_received: room.amount_received ?? ''
 			})
 		});
 		savingRoom = null;
 		if (res.ok) {
 			const data = await res.json();
 			roomSummaryDate = data.date || roomSummaryDate;
-			toast.success('Room note saved.');
+			toast.success('Room summary saved.');
 		} else {
 			const error = await res.json();
 			toast.error(error.error || 'Failed to update room summary.');
+		}
+	};
+
+	const clearAllRoomNotes = async () => {
+		clearingRoomSummary = true;
+		const res = await fetch('/api/daily-room-summary', {
+			method: 'DELETE',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ date: roomSummaryDate || selectedDate })
+		});
+		clearingRoomSummary = false;
+		clearRoomSummaryOpen = false;
+		if (res.ok) {
+			const data = await res.json();
+			roomSummaryDate = data.date || roomSummaryDate;
+			roomSummary = roomSummary.map((room) => ({
+				...room,
+				notes: '',
+				check_in_date: '',
+				tariff_per_day: null,
+				amount_received: null
+			}));
+			toast.success('All room notes cleared.');
+		} else {
+			const error = await res.json().catch(() => ({}));
+			toast.error(error.error || 'Failed to clear room notes.');
 		}
 	};
 
@@ -250,6 +277,17 @@
 
 	$: netPosition = summary.total_income - summary.total_expense;
 </script>
+
+<ConfirmModal
+	open={clearRoomSummaryOpen}
+	title="Clear all room notes?"
+	message="This will clear every note in the current room summary. Income, rooms, and other ledger data will not be affected."
+	confirmLabel={clearingRoomSummary ? 'Clearing…' : 'Clear all'}
+	cancelLabel="Cancel"
+	danger={true}
+	on:confirm={clearAllRoomNotes}
+	on:cancel={() => (clearRoomSummaryOpen = false)}
+/>
 
 <section class="hero-panel">
 	<div>
@@ -368,9 +406,19 @@
 	<div class="section-header">
 		<div>
 			<h2>Daily Room Summary</h2>
-			<p class="muted">Add short stay notes for all active hotel rooms.</p>
+			<p class="muted">Track check-in, daily tariff, amount received, and notes for all active hotel rooms.</p>
 		</div>
-		<div class="pill-note">Auto-save on exit</div>
+		<div class="summary-actions">
+			<div class="pill-note">Auto-save on exit</div>
+			<button
+				class="ghost danger-text clear-summary-button"
+				on:click={() => (clearRoomSummaryOpen = true)}
+				disabled={clearingRoomSummary || roomSummary.length === 0}
+			>
+				<Icon name="trash" size={15} />
+				Clear all
+			</button>
+		</div>
 	</div>
 	{#if roomSummaryDate}
 		<p class="muted update-note">
@@ -383,6 +431,9 @@
 			<thead>
 				<tr>
 					<th>Room</th>
+					<th>Check-in date</th>
+					<th>Tariff / day</th>
+					<th>Amount received</th>
 					<th>Notes</th>
 					<th style="width: 60px;">Status</th>
 				</tr>
@@ -390,7 +441,7 @@
 			<tbody>
 				{#if roomSummary.length === 0}
 					<tr>
-						<td colspan="3">
+						<td colspan="6">
 							<EmptyState message="No rooms configured for this property." icon="🏨" />
 						</td>
 					</tr>
@@ -398,19 +449,46 @@
 					{#each roomSummary as room}
 						<tr>
 							<td class="room-cell">{room.room_number}</td>
+							<td>
+								<input
+									type="date"
+									bind:value={room.check_in_date}
+									on:change={() => saveRoomSummary(room)}
+								/>
+							</td>
+							<td>
+								<input
+									type="number"
+									min="0"
+									step="1"
+									placeholder="0"
+									bind:value={room.tariff_per_day}
+									on:blur={() => saveRoomSummary(room)}
+								/>
+							</td>
+							<td>
+								<input
+									type="number"
+									min="0"
+									step="1"
+									placeholder="0"
+									bind:value={room.amount_received}
+									on:blur={() => saveRoomSummary(room)}
+								/>
+							</td>
 							<td class="notes-cell">
 								<input
 									type="text"
 									placeholder="Add notes for room {room.room_number}"
-									bind:value={roomNotes[room.room_number]}
-									on:blur={() => saveRoomNote(room.room_number)}
-									on:keydown={(e) => e.key === 'Enter' && saveRoomNote(room.room_number)}
+									bind:value={room.notes}
+									on:blur={() => saveRoomSummary(room)}
+									on:keydown={(e) => e.key === 'Enter' && saveRoomSummary(room)}
 								/>
 							</td>
 							<td class="status-cell">
 								{#if savingRoom === room.room_number}
 									<span class="saving-dot" aria-label="Saving"></span>
-								{:else if roomNotes[room.room_number]?.trim()}
+								{:else if room.notes?.trim() || room.check_in_date || room.tariff_per_day != null || room.amount_received != null}
 									<span class="saved-check" aria-label="Saved">✓</span>
 								{:else}
 									<span class="empty-dot" aria-label="No notes"></span>
@@ -679,6 +757,17 @@
 		color: var(--muted);
 		font-size: 0.86rem;
 		font-weight: 700;
+	}
+
+	.summary-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+	}
+
+	.clear-summary-button {
+		padding: 0.6rem 0.85rem;
+		font-size: 0.86rem;
 	}
 
 	.pill-note.positive {
@@ -954,6 +1043,15 @@
 		.pill-note {
 			width: 100%;
 			text-align: center;
+		}
+
+		.summary-actions {
+			width: 100%;
+			flex-wrap: wrap;
+		}
+
+		.summary-actions > * {
+			flex: 1 1 auto;
 		}
 
 		.hero-actions {

@@ -1,6 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import Icon from '$lib/components/Icon.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
@@ -8,29 +9,59 @@
 	import { formatINR } from '$lib/ui-utils.js';
 
 	let employees = [];
+	let rooms = [];
 	let expenseTypes = [];
+	let incomeTypes = [];
 	let owners = [];
 	let settings = { master_cash_start: 0, master_online_start: 0 };
 	let loading = true;
 	let savingSettings = false;
 	let newEmployee = '';
+	let newRoom = '';
 	let newExpenseType = '';
+	let newIncomeType = '';
 	let newOwner = '';
+	let hotelName = '';
+	let savingHotelName = false;
 
 	let confirmOpen = false;
 	let confirmConfig = { title: '', message: '', onConfirm: () => {} };
 
 	const loadMasters = async () => {
-		const [empRes, typeRes, ownerRes, settingsRes] = await Promise.all([
+		const [empRes, roomsRes, typeRes, incomeRes, ownerRes, settingsRes] = await Promise.all([
 			fetch('/api/employees'),
+			fetch('/api/rooms'),
 			fetch('/api/expense-types'),
+			fetch('/api/income-types'),
 			fetch('/api/owners'),
 			fetch('/api/settings')
 		]);
 		if (empRes.ok) employees = await empRes.json();
+		if (roomsRes.ok) rooms = (await roomsRes.json()).map((room) => ({ ...room, original: room.room_number }));
 		if (typeRes.ok) expenseTypes = await typeRes.json();
+		if (incomeRes.ok) incomeTypes = await incomeRes.json();
 		if (ownerRes.ok) owners = await ownerRes.json();
 		if (settingsRes.ok) settings = await settingsRes.json();
+	};
+
+	const addRoom = async () => {
+		const room_number = newRoom.trim();
+		if (!room_number) return;
+		const res = await fetch('/api/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room_number }) });
+		if (res.ok) { newRoom = ''; toast.success('Room added.'); await loadMasters(); }
+		else { const error = await res.json().catch(() => ({})); toast.error(error.error || 'Failed to add room.'); }
+	};
+
+	const updateRoom = async (room) => {
+		const res = await fetch('/api/rooms', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from: room.original, to: room.room_number }) });
+		if (res.ok) { toast.success('Room updated.'); await loadMasters(); }
+		else { const error = await res.json().catch(() => ({})); toast.error(error.error || 'Failed to update room.'); }
+	};
+
+	const deleteRoom = async (roomNumber) => {
+		const res = await fetch('/api/rooms', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room_number: roomNumber }) });
+		if (res.ok) { toast.success('Room removed.'); await loadMasters(); }
+		else { const error = await res.json().catch(() => ({})); toast.error(error.error || 'Failed to remove room.'); }
 	};
 
 	const addEmployee = async () => {
@@ -115,6 +146,26 @@
 		}
 	};
 
+	const addIncomeType = async () => {
+		const name = newIncomeType.trim();
+		if (!name) return;
+		const res = await fetch('/api/income-types', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+		if (res.ok) { newIncomeType = ''; toast.success('Income type added.'); await loadMasters(); }
+		else { toast.error('Failed to add income type.'); }
+	};
+
+	const updateIncomeType = async (type) => {
+		const res = await fetch(`/api/income-types/${type.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: type.name }) });
+		if (res.ok) { toast.success('Income type updated.'); await loadMasters(); }
+		else { toast.error('Failed to update income type.'); }
+	};
+
+	const deleteIncomeType = async (id) => {
+		const res = await fetch(`/api/income-types/${id}`, { method: 'DELETE' });
+		if (res.ok) { toast.success('Income type removed.'); await loadMasters(); }
+		else { const error = await res.json().catch(() => ({})); toast.error(error.error || 'Failed to remove income type.'); }
+	};
+
 	const addOwner = async () => {
 		const name = newOwner.trim();
 		if (!name) return;
@@ -173,6 +224,25 @@
 		}
 	};
 
+	const saveHotelName = async () => {
+		const name = hotelName.trim();
+		if (!name) return;
+		savingHotelName = true;
+		const res = await fetch('/api/hotel', {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ name })
+		});
+		savingHotelName = false;
+		if (res.ok) {
+			toast.success('Hotel name updated.');
+			window.location.reload();
+		} else {
+			const error = await res.json().catch(() => ({}));
+			toast.error(error.error || 'Failed to update hotel name.');
+		}
+	};
+
 	const requestDelete = (type, name, id, onConfirm) => {
 		confirmConfig = {
 			title: `Remove ${type}?`,
@@ -183,6 +253,7 @@
 	};
 
 	onMount(async () => {
+		hotelName = $page.data.hotelName;
 		loading = true;
 		await loadMasters();
 		loading = false;
@@ -202,6 +273,25 @@
 	}}
 	on:cancel={() => (confirmOpen = false)}
 />
+
+<section class="panel property-panel">
+	<div class="row">
+		<div>
+			<h2>Property Profile</h2>
+			<p class="muted">The selected hotel name appears throughout this ledger.</p>
+		</div>
+	</div>
+	<div class="form-grid">
+		<label>
+			<span>Hotel name</span>
+			<input bind:value={hotelName} />
+		</label>
+	</div>
+	<button on:click={saveHotelName} disabled={savingHotelName || !hotelName.trim()}>
+		<Icon name="save" size={18} />
+		{savingHotelName ? 'Saving…' : 'Save Hotel Name'}
+	</button>
+</section>
 
 <section class="panel balance-panel">
 	<div class="row">
@@ -234,6 +324,32 @@
 {/if}
 
 <div class="masters-grid">
+	<section class="panel master-card">
+		<div class="card-header">
+			<h2>Rooms</h2>
+			<span class="count-badge">{rooms.length}</span>
+		</div>
+		<div class="add-row">
+			<input placeholder="Add room number" bind:value={newRoom} on:keydown={(e) => e.key === 'Enter' && addRoom()} />
+			<button on:click={addRoom} disabled={!newRoom.trim()}><Icon name="plus" size={18} /></button>
+		</div>
+		<ul class="master-list">
+			{#if rooms.length === 0}
+				<EmptyState message="No rooms added." icon="🚪" />
+			{:else}
+				{#each rooms as room}
+					<li>
+						<input bind:value={room.room_number} />
+						<div class="actions">
+							<button class="ghost" on:click={() => updateRoom(room)} title="Save"><Icon name="save" size={16} /></button>
+							<button class="ghost danger-text" on:click={() => requestDelete('room', room.room_number, room.room_number, deleteRoom)} title="Remove"><Icon name="trash" size={16} /></button>
+						</div>
+					</li>
+				{/each}
+			{/if}
+		</ul>
+	</section>
+
 	<section class="panel master-card">
 		<div class="card-header">
 			<h2>Employees</h2>
@@ -291,6 +407,32 @@
 							<button class="ghost danger-text" on:click={() => requestDelete('expense type', type.name, type.id, deleteExpenseType)} title="Remove">
 								<Icon name="trash" size={16} />
 							</button>
+						</div>
+					</li>
+				{/each}
+			{/if}
+		</ul>
+	</section>
+
+	<section class="panel master-card">
+		<div class="card-header">
+			<h2>Income Types</h2>
+			<span class="count-badge">{incomeTypes.length}</span>
+		</div>
+		<div class="add-row">
+			<input placeholder="Add income type" bind:value={newIncomeType} on:keydown={(e) => e.key === 'Enter' && addIncomeType()} />
+			<button on:click={addIncomeType} disabled={!newIncomeType.trim()}><Icon name="plus" size={18} /></button>
+		</div>
+		<ul class="master-list">
+			{#if incomeTypes.length === 0}
+				<EmptyState message="No income types added." icon="💰" />
+			{:else}
+				{#each incomeTypes as type}
+					<li>
+						<input bind:value={type.name} />
+						<div class="actions">
+							<button class="ghost" on:click={() => updateIncomeType(type)} title="Save"><Icon name="save" size={16} /></button>
+							<button class="ghost danger-text" on:click={() => requestDelete('income type', type.name, type.id, deleteIncomeType)} title="Remove"><Icon name="trash" size={16} /></button>
 						</div>
 					</li>
 				{/each}

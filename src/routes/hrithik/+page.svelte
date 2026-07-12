@@ -177,7 +177,7 @@
 
 <ConfirmModal
 	open={confirmOpen}
-	title="Delete Hrithik transaction?"
+	title="Delete personal transaction?"
 	message="This will permanently remove this transaction."
 	confirmLabel="Delete"
 	cancelLabel="Cancel"
@@ -189,10 +189,9 @@
 <section class="panel">
 	<div class="row">
 		<div>
-			<h2>{$page.data.hotelName} Hrithik Ledger</h2>
+			<h2>Personal Ledger</h2>
 			<p class="muted">
-				This {$page.data.hotelName} Hrithik ledger is separate from the main income, expense, and
-				master balance sections.
+				This personal ledger is separate from the main income, expense, and master balance sections.
 			</p>
 		</div>
 	</div>
@@ -200,31 +199,31 @@
 	<div class="grid">
 		<div class="card balance-card">
 			<div class="card-title">
-				<h3>Hrithik Cash</h3>
+				<h3>Personal Cash</h3>
 				<span class="status-badge" class:positive={balance.meaning_cash === 'Settled'}>{balance.meaning_cash}</span>
 			</div>
 			<p class="big">{formatINR(balance.balance_cash)}</p>
 			<ul class="detail-list">
 				<li><span>Opening cash</span><strong>{formatINR(balance.opening_cash)}</strong></li>
-				<li><span>Cash income to Hrithik</span><strong>{formatINR(balance.total_income_cash)}</strong></li>
-				<li><span>Cash expense by Hrithik</span><strong>{formatINR(balance.total_expense_cash)}</strong></li>
+				<li><span>Cash income</span><strong>{formatINR(balance.total_income_cash)}</strong></li>
+				<li><span>Cash expense</span><strong>{formatINR(balance.total_expense_cash)}</strong></li>
 			</ul>
 		</div>
 		<div class="card balance-card">
 			<div class="card-title">
-				<h3>Hrithik Online</h3>
+				<h3>Personal Online</h3>
 				<span class="status-badge" class:positive={balance.meaning_online === 'Settled'}>{balance.meaning_online}</span>
 			</div>
 			<p class="big">{formatINR(balance.balance_online)}</p>
 			<ul class="detail-list">
 				<li><span>Opening online</span><strong>{formatINR(balance.opening_online)}</strong></li>
-				<li><span>Online income to Hrithik</span><strong>{formatINR(balance.total_income_online)}</strong></li>
-				<li><span>Online expense by Hrithik</span><strong>{formatINR(balance.total_expense_online)}</strong></li>
+				<li><span>Online income</span><strong>{formatINR(balance.total_income_online)}</strong></li>
+				<li><span>Online expense</span><strong>{formatINR(balance.total_expense_online)}</strong></li>
 			</ul>
 		</div>
 		<div class="card balance-card total-card">
 			<div class="card-title">
-				<h3>Hrithik Total</h3>
+				<h3>Personal Total</h3>
 				<span class="status-badge" class:positive={balance.meaning_total === 'Settled'}>{balance.meaning_total}</span>
 			</div>
 			<p class="big">{formatINR(balance.balance_total)}</p>
@@ -237,11 +236,11 @@
 		<div class="card opening-card">
 			<h3>Opening Balances</h3>
 			<label>
-				<span>Hrithik Cash Opening (INR)</span>
+				<span>Personal Cash Opening (INR)</span>
 				<input type="number" step="1" bind:value={openingCashInput} />
 			</label>
 			<label>
-				<span>Hrithik Online Opening (INR)</span>
+				<span>Personal Online Opening (INR)</span>
 				<input type="number" step="1" bind:value={openingOnlineInput} />
 			</label>
 			<button on:click={saveOpeningBalance} disabled={savingOpening}>
@@ -255,10 +254,9 @@
 <section class="panel entry-panel">
 	<div class="row">
 		<div>
-			<h2>Hrithik Entry</h2>
+			<h2>Personal Entry</h2>
 			<p class="muted">
-				Negative means Hrithik should take from {$page.data.hotelName}. Positive means Hrithik
-				should give to {$page.data.hotelName}.
+				Record personal cash or online movements separately from the hotel ledger.
 			</p>
 		</div>
 		<label class="date-label">
@@ -271,8 +269,8 @@
 		<label>
 			<span>Entry Type</span>
 			<select bind:value={form.entry_type}>
-				<option value="expense">Expense by Hrithik for {$page.data.hotelName} (subtract)</option>
-				<option value="income">Income from {$page.data.hotelName} to Hrithik (add)</option>
+				<option value="expense">Personal expense (subtract)</option>
+				<option value="income">Personal income (add)</option>
 			</select>
 		</label>
 		<label>
@@ -298,7 +296,7 @@
 </section>
 
 <section class="panel">
-	<h2>Latest 100 Hrithik Transactions</h2>
+	<h2>Latest 100 Personal Transactions</h2>
 	{#if loading}
 		<div class="shimmer-panel" aria-label="Loading transactions">
 			<div class="shimmer-line" style="width: 100%;"></div>
@@ -322,7 +320,7 @@
 					{#if transactions.length === 0}
 						<tr>
 							<td colspan="6">
-								<EmptyState message="No Hrithik transactions recorded yet." icon="📭" />
+								<EmptyState message="No personal transactions recorded yet." icon="📭" />
 							</td>
 						</tr>
 					{:else}

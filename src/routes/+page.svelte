@@ -1,11 +1,13 @@
 <script>
 	// @ts-nocheck
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import Icon from '$lib/components/Icon.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 	import { toast } from '$lib/stores/toast.js';
 	import { formatINR } from '$lib/ui-utils.js';
+	import { amountInWords, computeInvoiceTotals, getInvoiceProfile, openInvoicePrint } from '$lib/invoice.js';
 
 	const today = new Date().toISOString().slice(0, 10);
 	let selectedDate = today;
@@ -83,6 +85,133 @@
 	$: totalPaid = parseAmount(totalPaidInput);
 	$: totalTariff = billableDays * perDayTariff;
 	$: totalPending = Math.max(totalTariff - totalPaid, 0);
+
+	// ---------------------------------------------------------------- GST invoice
+	let invBillNo = '';
+	let invBillDate = today;
+	let invCustomerName = '';
+	let invCompanyName = '';
+	let invCustomerGstin = '';
+	let invArrivalDate = today;
+	let invArrivalTime = '12:00';
+	let invDepartureDate = today;
+	let invDepartureTime = '10:00';
+	let invRoomNo = '';
+	let invPersons = 1;
+	let invParticulars = 'Room Tariff';
+	let invRoomType = 'Deluxe Room';
+	let invQty = 1;
+	let invQtyTouched = false;
+	let invUnit = 'Days';
+	let invRate = '';
+	let invCgstRate = 2.5;
+	let invSgstRate = 2.5;
+	let invCgstOverride = '';
+	let invSgstOverride = '';
+	let invTotalOverride = '';
+	let invPaper = 'A5';
+
+	$: invoiceProfile = getInvoiceProfile($page.data?.hotel);
+
+	$: invAutoDays = (() => {
+		if (!invArrivalDate || !invDepartureDate) return 0;
+		const diff = Math.round(
+			(normalizeDate(parseDateLocal(invDepartureDate)) - normalizeDate(parseDateLocal(invArrivalDate))) / MS_IN_DAY
+		);
+		return Number.isFinite(diff) ? diff : 0;
+	})();
+
+	$: if (!invQtyTouched) invQty = invAutoDays > 0 ? invAutoDays : 1;
+
+	$: invoiceTotals = computeInvoiceTotals({
+		qty: Number(invQty) || 0,
+		rate: Number(invRate) || 0,
+		cgstRate: Number(invCgstRate) || 0,
+		sgstRate: Number(invSgstRate) || 0,
+		cgstOverride: invCgstOverride,
+		sgstOverride: invSgstOverride,
+		totalOverride: invTotalOverride
+	});
+
+	$: invoiceWords = amountInWords(invoiceTotals.grandTotal);
+
+	const prefillInvoiceFromCalculator = () => {
+		invArrivalDate = checkInInput;
+		invDepartureDate = checkOutInput;
+		invQtyTouched = false;
+		if (perDayTariff > 0) invRate = String(perDayTariff);
+		toast.success('Invoice prefilled from Days Calculator.');
+	};
+
+	const resetInvoice = () => {
+		invBillNo = '';
+		invBillDate = today;
+		invCustomerName = '';
+		invCompanyName = '';
+		invCustomerGstin = '';
+		invArrivalDate = today;
+		invArrivalTime = '12:00';
+		invDepartureDate = today;
+		invDepartureTime = '10:00';
+		invRoomNo = '';
+		invPersons = 1;
+		invParticulars = 'Room Tariff';
+		invRoomType = 'Deluxe Room';
+		invQtyTouched = false;
+		invQty = 1;
+		invUnit = 'Days';
+		invRate = '';
+		invCgstRate = 2.5;
+		invSgstRate = 2.5;
+		invCgstOverride = '';
+		invSgstOverride = '';
+		invTotalOverride = '';
+	};
+
+	const generateInvoicePdf = () => {
+		if (!invCustomerName.trim()) {
+			toast.error('Customer name is required.');
+			return;
+		}
+		if (!(Number(invRate) > 0)) {
+			toast.error('Enter a tariff rate greater than zero.');
+			return;
+		}
+		if (!(Number(invQty) > 0)) {
+			toast.error('Quantity must be at least 1.');
+			return;
+		}
+
+		const opened = openInvoicePrint(
+			{
+				billNo: invBillNo.trim(),
+				billDate: invBillDate,
+				customerName: invCustomerName.trim(),
+				companyName: invCompanyName.trim(),
+				customerGstin: invCustomerGstin.trim(),
+				arrivalDate: invArrivalDate,
+				arrivalTime: invArrivalTime,
+				departureDate: invDepartureDate,
+				departureTime: invDepartureTime,
+				roomNo: invRoomNo.trim(),
+				persons: invPersons,
+				particulars: invParticulars.trim(),
+				roomType: invRoomType.trim(),
+				qty: Number(invQty),
+				unit: invUnit,
+				rate: Number(invRate),
+				cgstRate: Number(invCgstRate) || 0,
+				sgstRate: Number(invSgstRate) || 0,
+				cgstOverride: invCgstOverride,
+				sgstOverride: invSgstOverride,
+				totalOverride: invTotalOverride,
+				paper: invPaper
+			},
+			invoiceProfile
+		);
+
+		if (!opened) toast.error('Allow pop-ups for this site to generate the invoice.');
+	};
 
 	const loadSummary = async () => {
 		const [summaryRes, masterRes] = await Promise.all([
@@ -545,6 +674,159 @@
 	{/if}
 </section>
 
+<section class="panel invoice-panel">
+	<div class="section-header">
+		<div>
+			<h2>Create GST PDF Invoice</h2>
+			<p class="muted">
+				Fill the guest details and print the tax invoice on {invoiceProfile.name} letterhead (GSTIN {invoiceProfile.gstin}).
+			</p>
+		</div>
+		<div class="invoice-actions">
+			<button class="ghost" on:click={prefillInvoiceFromCalculator} title="Copy dates and tariff from the Days Calculator">
+				<Icon name="calculator" size={18} />
+				Prefill from calculator
+			</button>
+			<button class="ghost" on:click={resetInvoice} title="Clear all invoice fields">
+				<Icon name="close" size={18} />
+				Reset
+			</button>
+		</div>
+	</div>
+
+	<h3 class="invoice-subhead">Bill &amp; Customer</h3>
+	<div class="invoice-grid">
+		<label>
+			<span>Bill No</span>
+			<input type="text" placeholder="e.g. 124" bind:value={invBillNo} />
+		</label>
+		<label>
+			<span>Bill Date</span>
+			<input type="date" bind:value={invBillDate} />
+		</label>
+		<label>
+			<span>Customer Name (Mr./Mrs.)</span>
+			<input type="text" placeholder="e.g. Viswanath Jha" bind:value={invCustomerName} />
+		</label>
+		<label>
+			<span>Company Name</span>
+			<input type="text" placeholder="e.g. VAV World" bind:value={invCompanyName} />
+		</label>
+		<label class="span-2">
+			<span>Customer GSTIN No (15 characters)</span>
+			<input
+				type="text"
+				maxlength="15"
+				placeholder="e.g. 09AEIPJ8087L1ZQ"
+				class="gstin-input"
+				bind:value={invCustomerGstin}
+				on:input={(e) => (invCustomerGstin = e.currentTarget.value.toUpperCase())}
+			/>
+		</label>
+	</div>
+
+	<h3 class="invoice-subhead">Stay Details</h3>
+	<div class="invoice-grid">
+		<label>
+			<span>Arrival Date</span>
+			<input type="date" bind:value={invArrivalDate} />
+		</label>
+		<label>
+			<span>Arrival Time</span>
+			<input type="time" bind:value={invArrivalTime} />
+		</label>
+		<label>
+			<span>Departure Date</span>
+			<input type="date" bind:value={invDepartureDate} />
+		</label>
+		<label>
+			<span>Departure Time</span>
+			<input type="time" bind:value={invDepartureTime} />
+		</label>
+		<label>
+			<span>Room No</span>
+			<input type="text" list="invoice-room-options" placeholder="e.g. 305" bind:value={invRoomNo} />
+			<datalist id="invoice-room-options">
+				{#each roomSummary as room}
+					<option value={room.room_number}></option>
+				{/each}
+			</datalist>
+		</label>
+		<label>
+			<span>Person(s)</span>
+			<input type="number" min="1" step="1" bind:value={invPersons} />
+		</label>
+	</div>
+
+	<h3 class="invoice-subhead">Charges</h3>
+	<div class="invoice-grid">
+		<label>
+			<span>Particulars</span>
+			<input type="text" placeholder="Room Tariff" bind:value={invParticulars} />
+		</label>
+		<label>
+			<span>Room Type</span>
+			<input type="text" placeholder="Deluxe Room" bind:value={invRoomType} />
+		</label>
+		<label>
+			<span>Qty {invQtyTouched ? '' : '(auto from dates)'}</span>
+			<input type="number" min="1" step="1" bind:value={invQty} on:input={() => (invQtyTouched = true)} />
+		</label>
+		<label>
+			<span>Unit</span>
+			<input type="text" placeholder="Days" bind:value={invUnit} />
+		</label>
+		<label>
+			<span>Tariff Per Day (Rate)</span>
+			<input type="number" min="0" step="1" placeholder="e.g. 1349" bind:value={invRate} />
+		</label>
+		<label>
+			<span>Paper Size</span>
+			<select bind:value={invPaper}>
+				<option value="A5">A5 (bill book size)</option>
+				<option value="A4">A4</option>
+			</select>
+		</label>
+		<label>
+			<span>CGST %</span>
+			<input type="number" min="0" step="0.5" bind:value={invCgstRate} />
+		</label>
+		<label>
+			<span>SGST %</span>
+			<input type="number" min="0" step="0.5" bind:value={invSgstRate} />
+		</label>
+		<label>
+			<span>CGST Amount (override)</span>
+			<input type="number" min="0" step="0.01" placeholder={invoiceTotals.cgst.toFixed(2)} bind:value={invCgstOverride} />
+		</label>
+		<label>
+			<span>SGST Amount (override)</span>
+			<input type="number" min="0" step="0.01" placeholder={invoiceTotals.sgst.toFixed(2)} bind:value={invSgstOverride} />
+		</label>
+		<label>
+			<span>Grand Total (override)</span>
+			<input type="number" min="0" step="0.01" placeholder={invoiceTotals.grandTotal.toFixed(2)} bind:value={invTotalOverride} />
+		</label>
+	</div>
+
+	<div class="invoice-summary">
+		<div class="invoice-summary-lines">
+			<div><span>Sub-Total</span><strong>{formatINR(invoiceTotals.subTotal)}</strong></div>
+			<div><span>GST (CGST {invCgstRate}%)</span><strong>{formatINR(invoiceTotals.cgst)}</strong></div>
+			<div><span>GST (SGST {invSgstRate}%)</span><strong>{formatINR(invoiceTotals.sgst)}</strong></div>
+			<div class="grand"><span>Grand Total</span><strong>{formatINR(invoiceTotals.grandTotal)}</strong></div>
+		</div>
+		<p class="muted invoice-words">In words: {invoiceWords}</p>
+		<button class="invoice-generate" on:click={generateInvoicePdf}>
+			<Icon name="bill" size={18} />
+			Generate PDF Invoice
+		</button>
+	</div>
+	<p class="muted calculator-note">
+		Opens a print-ready invoice in a new tab — choose “Save as PDF” in the print dialog. Allow pop-ups if nothing opens.
+	</p>
+</section>
+
 <section class="panel">
 	<div class="section-header">
 		<div>
@@ -961,6 +1243,102 @@
 	.calculator-note {
 		margin: 0.8rem 0 0;
 		font-size: 0.85rem;
+	}
+
+	.invoice-actions {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.invoice-subhead {
+		margin: 1.4rem 0 0.2rem;
+		font-size: 0.8rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--muted);
+	}
+
+	.invoice-panel .invoice-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 0.9rem;
+		margin-top: 0.75rem;
+	}
+
+	.invoice-panel label {
+		display: grid;
+		gap: 0.4rem;
+	}
+
+	.invoice-panel label.span-2 {
+		grid-column: span 2;
+	}
+
+	.invoice-panel input,
+	.invoice-panel select {
+		width: 100%;
+	}
+
+	.invoice-panel input[type='number'] {
+		appearance: textfield;
+	}
+
+	.gstin-input {
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		font-weight: 700;
+	}
+
+	.invoice-summary {
+		margin-top: 1.4rem;
+		padding: 1rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		background: linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.38));
+		display: grid;
+		gap: 0.75rem;
+	}
+
+	.invoice-summary-lines {
+		display: grid;
+		gap: 0.45rem;
+	}
+
+	.invoice-summary-lines div {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 1rem;
+		font-size: 0.92rem;
+	}
+
+	.invoice-summary-lines span {
+		color: var(--muted);
+		font-weight: 600;
+	}
+
+	.invoice-summary-lines .grand {
+		border-top: 1px solid var(--border);
+		padding-top: 0.55rem;
+		font-size: 1.05rem;
+	}
+
+	.invoice-summary-lines .grand strong {
+		font-size: 1.3rem;
+		font-weight: 800;
+		color: var(--text-strong);
+	}
+
+	.invoice-words {
+		margin: 0;
+		font-size: 0.85rem;
+		font-style: italic;
+	}
+
+	.invoice-generate {
+		justify-self: start;
 	}
 
 	.board-input {

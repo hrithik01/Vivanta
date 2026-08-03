@@ -184,6 +184,10 @@
 				<h4>Total Online Expense</h4>
 				<p>{formatINR(report.includeExpense ? report.expense_breakdown?.online_expense_without_owner_payout_total : 0)}</p>
 			</div>
+			<div class="card total-card expense">
+				<h4>Total Expenses Without Owner Payout</h4>
+				<p>{formatINR(report.includeExpense ? report.expense_breakdown?.expense_without_owner_payout_total : 0)}</p>
+			</div>
 			<div class="card total-card owner">
 				<h4>Total Owner Payout</h4>
 				<p>{formatINR(report.includeExpense ? report.expense_breakdown?.owner_payout_total : 0)}</p>

@@ -7,7 +7,7 @@
 	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 	import { toast } from '$lib/stores/toast.js';
 	import { formatINR } from '$lib/ui-utils.js';
-	import { amountInWords, computeInvoiceTotals, getInvoiceProfile, openInvoicePrint } from '$lib/invoice.js';
+	import { amountInWords, calculateStayDays, computeInvoiceTotals, getInvoiceProfile, openInvoicePrint } from '$lib/invoice.js';
 
 	const today = new Date().toISOString().slice(0, 10);
 	let selectedDate = today;
@@ -100,8 +100,6 @@
 	let invPersons = 1;
 	let invParticulars = 'Room Tariff';
 	let invRoomType = 'Deluxe Room';
-	let invQty = 1;
-	let invQtyTouched = false;
 	let invUnit = 'Days';
 	let invRate = '';
 	let invCgstRate = 2.5;
@@ -113,18 +111,13 @@
 
 	$: invoiceProfile = getInvoiceProfile($page.data?.hotel);
 
-	$: invAutoDays = (() => {
-		if (!invArrivalDate || !invDepartureDate) return 0;
-		const diff = Math.round(
-			(normalizeDate(parseDateLocal(invDepartureDate)) - normalizeDate(parseDateLocal(invArrivalDate))) / MS_IN_DAY
-		);
-		return Number.isFinite(diff) ? diff : 0;
-	})();
-
-	$: if (!invQtyTouched) invQty = invAutoDays > 0 ? invAutoDays : 1;
+	// Qty is the nights between check-in and check-out, plus one extra day when
+	// the guest checks out after 12:00 PM.
+	$: invStay = calculateStayDays(invArrivalDate, invDepartureDate, invDepartureTime);
+	$: invQty = invStay.valid ? invStay.days : 0;
 
 	$: invoiceTotals = computeInvoiceTotals({
-		qty: Number(invQty) || 0,
+		qty: invQty,
 		rate: Number(invRate) || 0,
 		cgstRate: Number(invCgstRate) || 0,
 		sgstRate: Number(invSgstRate) || 0,
@@ -135,10 +128,13 @@
 
 	$: invoiceWords = amountInWords(invoiceTotals.grandTotal);
 
+	const scrollToGstInvoice = () => {
+		document.getElementById('gst-invoice-generator')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	};
+
 	const prefillInvoiceFromCalculator = () => {
 		invArrivalDate = checkInInput;
 		invDepartureDate = checkOutInput;
-		invQtyTouched = false;
 		if (perDayTariff > 0) invRate = String(perDayTariff);
 		toast.success('Invoice prefilled from Days Calculator.');
 	};
@@ -157,8 +153,6 @@
 		invPersons = 1;
 		invParticulars = 'Room Tariff';
 		invRoomType = 'Deluxe Room';
-		invQtyTouched = false;
-		invQty = 1;
 		invUnit = 'Days';
 		invRate = '';
 		invCgstRate = 2.5;
@@ -177,8 +171,8 @@
 			toast.error('Enter a tariff rate greater than zero.');
 			return;
 		}
-		if (!(Number(invQty) > 0)) {
-			toast.error('Quantity must be at least 1.');
+		if (!(invQty > 0)) {
+			toast.error('Departure date must be after the arrival date.');
 			return;
 		}
 
@@ -197,7 +191,7 @@
 				persons: invPersons,
 				particulars: invParticulars.trim(),
 				roomType: invRoomType.trim(),
-				qty: Number(invQty),
+				qty: invQty,
 				unit: invUnit,
 				rate: Number(invRate),
 				cgstRate: Number(invCgstRate) || 0,
@@ -437,6 +431,10 @@
 			<Icon name="plus" size={18} />
 			Add Expense
 		</a>
+		<button class="secondary-button" on:click={scrollToGstInvoice}>
+			<Icon name="bill" size={18} />
+			GST Invoice
+		</button>
 	</div>
 </section>
 
@@ -674,7 +672,7 @@
 	{/if}
 </section>
 
-<section class="panel invoice-panel">
+<section id="gst-invoice-generator" class="panel invoice-panel">
 	<div class="section-header">
 		<div>
 			<h2>Create GST PDF Invoice</h2>
@@ -769,8 +767,17 @@
 			<input type="text" placeholder="Deluxe Room" bind:value={invRoomType} />
 		</label>
 		<label>
-			<span>Qty {invQtyTouched ? '' : '(auto from dates)'}</span>
-			<input type="number" min="1" step="1" bind:value={invQty} on:input={() => (invQtyTouched = true)} />
+			<span>Qty — Days (auto)</span>
+			<input type="number" value={invQty} readonly tabindex="-1" class="readonly-field" />
+			<small class="field-hint">
+				{#if !invStay.valid}
+					Departure date must be on or after arrival date.
+				{:else if invStay.extraDay}
+					{invStay.nights} night{invStay.nights === 1 ? '' : 's'} + 1 extra day (check-out after 12:00 PM)
+				{:else}
+					{invStay.nights} night{invStay.nights === 1 ? '' : 's'}, check-out by 12:00 PM
+				{/if}
+			</small>
 		</label>
 		<label>
 			<span>Unit</span>
@@ -812,8 +819,8 @@
 	<div class="invoice-summary">
 		<div class="invoice-summary-lines">
 			<div><span>Sub-Total</span><strong>{formatINR(invoiceTotals.subTotal)}</strong></div>
-			<div><span>GST (CGST {invCgstRate}%)</span><strong>{formatINR(invoiceTotals.cgst)}</strong></div>
-			<div><span>GST (SGST {invSgstRate}%)</span><strong>{formatINR(invoiceTotals.sgst)}</strong></div>
+			<div><span>CGST ({invCgstRate} %)</span><strong>{formatINR(invoiceTotals.cgst)}</strong></div>
+			<div><span>SGST ({invSgstRate} %)</span><strong>{formatINR(invoiceTotals.sgst)}</strong></div>
 			<div class="grand"><span>Grand Total</span><strong>{formatINR(invoiceTotals.grandTotal)}</strong></div>
 		</div>
 		<p class="muted invoice-words">In words: {invoiceWords}</p>
@@ -1283,6 +1290,20 @@
 
 	.invoice-panel input[type='number'] {
 		appearance: textfield;
+	}
+
+	.field-hint {
+		color: var(--muted);
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: none;
+		letter-spacing: 0;
+	}
+
+	.readonly-field {
+		background: rgba(148, 163, 184, 0.14);
+		cursor: default;
+		font-weight: 700;
 	}
 
 	.gstin-input {

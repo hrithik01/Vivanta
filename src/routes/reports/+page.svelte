@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import HisabDistributor from '$lib/components/HisabDistributor.svelte';
 	import { toast } from '$lib/stores/toast.js';
 	import { EXPENSE_PAYMENT_TYPES, formatExpensePaymentType } from '$lib/expense-payment.js';
 	import { formatINR, formatShortDate } from '$lib/ui-utils.js';
@@ -153,6 +154,8 @@
 	</button>
 </section>
 
+<HisabDistributor />
+
 {#if loading || running}
 	<div class="shimmer-panel" aria-label="Loading report">
 		<div class="shimmer-line" style="width: 100%;"></div>
@@ -175,6 +178,10 @@
 			<div class="card total-card online">
 				<h4>Total Online Income</h4>
 				<p>{formatINR(report.includeIncome ? report.income_breakdown?.online : 0)}</p>
+			</div>
+			<div class="card total-card online">
+				<h4>MMT Revenue</h4>
+				<p>{formatINR(report.includeIncome ? report.income_breakdown?.mmt : 0)}</p>
 			</div>
 			<div class="card total-card expense">
 				<h4>Total Cash Expense</h4>
@@ -217,6 +224,10 @@
 					<div class="mini-metric">
 						<span class="muted">Total Online Income</span>
 						<p>{formatINR(report.income_breakdown?.online)}</p>
+					</div>
+					<div class="mini-metric">
+						<span class="muted">MMT Revenue</span>
+						<p>{formatINR(report.income_breakdown?.mmt)}</p>
 					</div>
 				</div>
 			</div>

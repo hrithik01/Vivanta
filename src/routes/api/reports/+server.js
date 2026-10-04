@@ -40,11 +40,13 @@ export const GET = ({ url }) => {
 	let incomeTotals = {
 		total_income: 0,
 		cash_income: 0,
-		online_income: 0
+		online_income: 0,
+		mmt_income: 0
 	};
 	let incomeBreakdown = {
 		cash: 0,
-		online: 0
+		online: 0,
+		mmt: 0
 	};
 	let incomeEntries = [];
 
@@ -55,7 +57,8 @@ export const GET = ({ url }) => {
 					`SELECT
 					 COALESCE(SUM(amount), 0) as total_income,
 					 COALESCE(SUM(CASE WHEN income_type = 'cash' THEN amount ELSE 0 END), 0) as cash_income,
-					 COALESCE(SUM(CASE WHEN income_type = 'online' THEN amount ELSE 0 END), 0) as online_income
+					 COALESCE(SUM(CASE WHEN income_type = 'online' THEN amount ELSE 0 END), 0) as online_income,
+					 COALESCE(SUM(CASE WHEN room_number = 'MMT' THEN amount ELSE 0 END), 0) as mmt_income
 					 FROM income
 					 WHERE date BETWEEN ? AND ? AND income_type = ?`
 				)
@@ -74,7 +77,8 @@ export const GET = ({ url }) => {
 					`SELECT
 					 COALESCE(SUM(amount), 0) as total_income,
 					 COALESCE(SUM(CASE WHEN income_type = 'cash' THEN amount ELSE 0 END), 0) as cash_income,
-					 COALESCE(SUM(CASE WHEN income_type = 'online' THEN amount ELSE 0 END), 0) as online_income
+					 COALESCE(SUM(CASE WHEN income_type = 'online' THEN amount ELSE 0 END), 0) as online_income,
+					 COALESCE(SUM(CASE WHEN room_number = 'MMT' THEN amount ELSE 0 END), 0) as mmt_income
 					 FROM income
 					 WHERE date BETWEEN ? AND ?`
 				)
@@ -91,7 +95,8 @@ export const GET = ({ url }) => {
 
 		incomeBreakdown = {
 			cash: incomeTotals.cash_income || 0,
-			online: incomeTotals.online_income || 0
+			online: incomeTotals.online_income || 0,
+			mmt: incomeTotals.mmt_income || 0
 		};
 	}
 

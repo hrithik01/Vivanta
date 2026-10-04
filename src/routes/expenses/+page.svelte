@@ -17,9 +17,12 @@
 		{ label: 'Last 4 weeks', value: '28d', days: 28 },
 		{ label: 'Last 2 months', value: '2m', months: 2 },
 		{ label: 'Last 6 months', value: '6m', months: 6 },
-		{ label: 'Last 12 months', value: '12m', months: 12 }
+		{ label: 'Last 12 months', value: '12m', months: 12 },
+		{ label: 'Custom', value: 'custom' }
 	];
 	let selectedRangeValue = '14d';
+	let customStart = '';
+	let customEnd = '';
 	let expenseTypes = [];
 	let employees = [];
 	let owners = [];
@@ -82,10 +85,20 @@
 		return formatDateInput(start);
 	};
 
-	const loadExpenses = async () => {
+	const getActiveRange = () => {
+		if (selectedRangeValue === 'custom') return { start: customStart, end: customEnd };
 		const selectedRange = dateRangeOptions.find((o) => o.value === selectedRangeValue) || dateRangeOptions[1];
-		const start = getRangeStart(selectedDate, selectedRange);
-		const res = await fetch(`/api/expenses?start=${start}&end=${selectedDate}`);
+		return { start: getRangeStart(selectedDate, selectedRange), end: selectedDate };
+	};
+
+	const loadExpenses = async () => {
+		const { start, end } = getActiveRange();
+		if (!start || !end) return;
+		if (start > end) {
+			toast.error('From date must be on or before To date.');
+			return;
+		}
+		const res = await fetch(`/api/expenses?start=${start}&end=${end}`);
 		if (res.ok) {
 			expenseList = await res.json();
 			editAmounts = expenseList.reduce((acc, item) => ({ ...acc, [item.id]: item.amount }), {});
@@ -245,11 +258,28 @@
 		await loadExpenses();
 	};
 
+	let previousRangeValue = selectedRangeValue;
+
 	const onRangeChange = async () => {
+		if (selectedRangeValue === 'custom' && !customStart && !customEnd) {
+			// Seed the custom range with whatever range was showing before.
+			const previous = dateRangeOptions.find((o) => o.value === previousRangeValue) || dateRangeOptions[1];
+			customStart = getRangeStart(selectedDate, previous);
+			customEnd = selectedDate;
+		}
+		previousRangeValue = selectedRangeValue;
+		await loadExpenses();
+	};
+
+	const onCustomRangeChange = async () => {
 		await loadExpenses();
 	};
 
 	$: selectedRangeLabel = dateRangeOptions.find((option) => option.value === selectedRangeValue)?.label || 'Last 2 weeks';
+	$: listHeading =
+		selectedRangeValue === 'custom'
+			? `Expenses (${customStart ? formatShortDate(customStart) : '…'} – ${customEnd ? formatShortDate(customEnd) : '…'})`
+			: `Expenses (${selectedRangeLabel} ending ${formatShortDate(selectedDate)})`;
 	$: selectedType = expenseTypes.find((type) => String(type.id) === String(form.expense_type_id));
 	$: requiresEmployee = requiresEmployeeForExpense(form.expense_type_id);
 	$: requiresOwner = requiresOwnerForExpense(form.expense_type_id, form.payment_type);
@@ -354,7 +384,7 @@
 <section class="panel">
 	<div class="row list-header">
 		<div>
-			<h2>Expenses ({selectedRangeLabel} ending {formatShortDate(selectedDate)})</h2>
+			<h2>{listHeading}</h2>
 			<p class="muted">{expenseSummary.count} entries &middot; Total {formatINR(expenseSummary.amount)}</p>
 		</div>
 		<button class="ghost" on:click={() => (showActions = !showActions)}>
@@ -372,6 +402,16 @@
 				{/each}
 			</select>
 		</label>
+		{#if selectedRangeValue === 'custom'}
+			<label class="conditional">
+				<span>From</span>
+				<input type="date" bind:value={customStart} max={customEnd || undefined} on:change={onCustomRangeChange} />
+			</label>
+			<label class="conditional">
+				<span>To</span>
+				<input type="date" bind:value={customEnd} min={customStart || undefined} on:change={onCustomRangeChange} />
+			</label>
+		{/if}
 		<label>
 			<span>Filter by Expense Type</span>
 			<select bind:value={expenseTypeFilter}>

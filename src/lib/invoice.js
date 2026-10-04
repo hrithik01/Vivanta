@@ -23,7 +23,8 @@ export const INVOICE_PROFILES = {
 		address: 'OPP. POST OFFICE, NEW BUS STAND, BANSWARA(RAJ.)-327001',
 		gstin: '08ABZFM7224L1ZE',
 		signatoryFor: 'VIVANTA GROUP OF BUSINESS',
-		jurisdiction: 'Banswara'
+		jurisdiction: 'Banswara',
+		stayNote: 'Note: Check-in / Check-out time is 11:00 AM. Check-out after 12:00 PM is charged as an extra day.'
 	},
 	bluemoon: {
 		logoLetter: 'B',
@@ -33,7 +34,8 @@ export const INVOICE_PROFILES = {
 		address: 'BANSWARA (RAJ.) - 327001',
 		gstin: '08ABZFM7224L1ZE',
 		signatoryFor: 'VIVANTA GROUP OF BUSINESS',
-		jurisdiction: 'Banswara'
+		jurisdiction: 'Banswara',
+		stayNote: 'Note: Check-in / Check-out time is 11:00 AM. Check-out after 12:00 PM is charged as an extra day.'
 	}
 };
 
@@ -145,6 +147,13 @@ const printTime = (value) => {
 	return `${display}:${String(rawMinute ?? '00').padStart(2, '0')}${suffix}`;
 };
 
+/** 2.5 -> "2.5", 6 -> "6", 2.50 -> "2.5" */
+const printRate = (value) => {
+	const rate = Number(value);
+	if (!Number.isFinite(rate)) return '0';
+	return String(Math.round(rate * 100) / 100);
+};
+
 const escapeHtml = (value) =>
 	String(value ?? '')
 		.replace(/&/g, '&amp;')
@@ -157,6 +166,46 @@ const gstinBoxes = (value) => {
 	const chars = String(value || '').toUpperCase().replace(/\s+/g, '').slice(0, 15).split('');
 	const cells = Array.from({ length: 15 }, (_, index) => `<span class="gst-box">${escapeHtml(chars[index] || '')}</span>`);
 	return cells.join('');
+};
+
+/* -------------------------------------------------------------------------- */
+/* Chargeable days                                                             */
+/* -------------------------------------------------------------------------- */
+
+/** Check-outs later than this hour are charged an extra day. */
+export const CHECKOUT_GRACE_HOUR = 12;
+
+/**
+ * Chargeable days for a stay: one day per night, plus an extra day when the
+ * guest checks out after 12:00 PM. A same-day stay counts as one day.
+ *
+ * @param {string} arrivalDate   "YYYY-MM-DD"
+ * @param {string} departureDate "YYYY-MM-DD"
+ * @param {string} departureTime "HH:MM" (24h)
+ * @returns {{ nights: number, extraDay: boolean, days: number, valid: boolean }}
+ */
+export const calculateStayDays = (arrivalDate, departureDate, departureTime) => {
+	const toParts = (value) => String(value || '').split('-').map(Number);
+	const [aY, aM, aD] = toParts(arrivalDate);
+	const [dY, dM, dD] = toParts(departureDate);
+
+	if (!aY || !aM || !aD || !dY || !dM || !dD) {
+		return { nights: 0, extraDay: false, days: 0, valid: false };
+	}
+
+	const arrival = new Date(aY, aM - 1, aD);
+	const departure = new Date(dY, dM - 1, dD);
+	const nights = Math.round((departure - arrival) / 86400000);
+	if (!Number.isFinite(nights) || nights < 0) {
+		return { nights: 0, extraDay: false, days: 0, valid: false };
+	}
+
+	const [rawHour, rawMinute] = String(departureTime || '').split(':').map(Number);
+	const hour = Number.isFinite(rawHour) ? rawHour : 0;
+	const minute = Number.isFinite(rawMinute) ? rawMinute : 0;
+	const extraDay = hour > CHECKOUT_GRACE_HOUR || (hour === CHECKOUT_GRACE_HOUR && minute > 0);
+
+	return { nights, extraDay, days: Math.max(nights + (extraDay ? 1 : 0), 1), valid: true };
 };
 
 /* -------------------------------------------------------------------------- */
@@ -277,6 +326,7 @@ export const buildInvoiceHtml = (invoice, profile = FALLBACK_PROFILE) => {
 	table { width: 100%; border-collapse: collapse; }
 	.stay-table td { border: 0.8pt solid #000; padding: 1.6mm 2mm; font-size: 9.5pt; }
 	.stay-table { margin-bottom: 3mm; }
+	.stay-table .emphasis { font-weight: 700; font-size: 10.5pt; }
 	.items-table th, .items-table td { border: 0.8pt solid #000; padding: 1.8mm 2mm; font-size: 9.5pt; }
 	.items-table th { text-align: center; font-weight: 600; }
 	.items-table .c { text-align: center; }
@@ -291,7 +341,8 @@ export const buildInvoiceHtml = (invoice, profile = FALLBACK_PROFILE) => {
 	.sign { margin-top: 5mm; text-align: right; font-size: 9.5pt; }
 	.sign .for { font-weight: 700; }
 	.sign .line { display: inline-block; width: 48mm; border-top: 0.8pt solid #000; margin-top: 16mm; padding-top: 1mm; text-align: center; }
-	.footnote { font-size: 8pt; margin-top: -8mm; }
+	.stay-note { font-size: 7.5pt; font-style: italic; margin-top: -10mm; margin-bottom: 1.2mm; }
+	.footnote { font-size: 8pt; }
 	.foot-row { display: flex; justify-content: space-between; align-items: flex-end; }
 	@media print {
 		html, body { background: #fff; }
@@ -350,12 +401,12 @@ export const buildInvoiceHtml = (invoice, profile = FALLBACK_PROFILE) => {
 			<tr>
 				<td>Arrival Date: ${escapeHtml(printDate(invoice.arrivalDate))}</td>
 				<td>Arrival Time: ${escapeHtml(printTime(invoice.arrivalTime))}</td>
-				<td>Room No: ${escapeHtml(invoice.roomNo || '')}</td>
+				<td>Room No: <strong class="emphasis">${escapeHtml(invoice.roomNo || '')}</strong></td>
 			</tr>
 			<tr>
 				<td>Departure Date: ${escapeHtml(printDate(invoice.departureDate))}</td>
 				<td>Departure Time: ${escapeHtml(printTime(invoice.departureTime))}</td>
-				<td>Person(s): ${escapeHtml(invoice.persons ?? '')}</td>
+				<td>Person(s): <strong class="emphasis">${escapeHtml(invoice.persons ?? '')}</strong></td>
 			</tr>
 		</tbody>
 	</table>
@@ -389,11 +440,11 @@ export const buildInvoiceHtml = (invoice, profile = FALLBACK_PROFILE) => {
 				<td class="value">${money(totals.subTotal)}</td>
 			</tr>
 			<tr>
-				<td class="label">Goods &amp; Services Tax (GST)</td>
+				<td class="label">CGST (${printRate(invoice.cgstRate ?? 2.5)} %)</td>
 				<td class="value">${money(totals.cgst)}</td>
 			</tr>
 			<tr>
-				<td class="label">Goods &amp; Services Tax (GST)</td>
+				<td class="label">SGST (${printRate(invoice.sgstRate ?? 2.5)} %)</td>
 				<td class="value">${money(totals.sgst)}</td>
 			</tr>
 			<tr class="grand">
@@ -409,6 +460,7 @@ export const buildInvoiceHtml = (invoice, profile = FALLBACK_PROFILE) => {
 		<div class="for">For : ${escapeHtml(profile.signatoryFor)}</div>
 		<div class="line">Authorized Signatory</div>
 	</div>
+	<div class="stay-note">${escapeHtml(profile.stayNote || '')}</div>
 	<div class="foot-row">
 		<div class="footnote">* All disputes will be settled at ${escapeHtml(profile.jurisdiction)} Jurisdiction.</div>
 	</div>

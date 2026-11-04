@@ -10,7 +10,8 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json --watch",
-		"test:invoice": "node --test tests/invoice.test.js"
+		"test:invoice": "node --test tests/invoice.test.js",
+		"test:reports": "node --test tests/report-overview.test.js"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^4.0.0",
@@ -22,6 +23,7 @@
 		"vite": "^6.2.5"
 	},
 	"dependencies": {
-		"better-sqlite3": "^12.6.2"
+		"better-sqlite3": "^12.6.2",
+		"pdf-lib": "^1.17.1"
 	}
 }

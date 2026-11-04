@@ -368,7 +368,7 @@
 	<div class="row list-header">
 		<div>
 			<h2>Income ({selectedRangeLabel} ending {formatShortDate(selectedDate)})</h2>
-			<p class="muted">{incomeSummary.count} entries &middot; Total {formatINR(incomeSummary.amount)}</p>
+			<p class="entry-summary">{incomeSummary.count} entries &middot; Total {formatINR(incomeSummary.amount)}</p>
 		</div>
 		<button class="ghost" on:click={() => (showActions = !showActions)}>
 			<Icon name={showActions ? 'close' : 'edit'} size={16} />
@@ -570,6 +570,13 @@
 </section>
 
 <style>
+    .list-header .entry-summary {
+        font-size: 15px;
+        font-weight: 750;
+        color: var(--text-strong);
+        font-variant-numeric: tabular-nums;
+    }
+
 	.entry-panel {
 		border-left: 4px solid var(--success);
 	}

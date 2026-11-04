@@ -297,6 +297,13 @@
 		const matchesPaymentMode = paymentModeFilter === 'all' || expense.payment_type === paymentModeFilter;
 		return matchesType && matchesEmployee && matchesPaymentMode;
 	});
+	$: dailyExpenseTotals = filteredExpenses.reduce((totals, expense, index) => {
+        const daily = totals[expense.date] || { amount: 0, count: 0, firstIndex: index };
+        daily.amount += Number(expense.amount || 0);
+        daily.count += 1;
+        totals[expense.date] = daily;
+        return totals;
+    }, {});
 	$: expenseSummary = {
 		count: filteredExpenses.length,
 		amount: filteredExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0)
@@ -390,7 +397,7 @@
 	<div class="row list-header">
 		<div>
 			<h2>{listHeading}</h2>
-			<p class="muted">{expenseSummary.count} entries &middot; Total {formatINR(expenseSummary.amount)}</p>
+			<p class="entry-summary">{expenseSummary.count} entries &middot; Total {formatINR(expenseSummary.amount)}</p>
 		</div>
 		<button class="ghost" on:click={() => (showActions = !showActions)}>
 			<Icon name={showActions ? 'close' : 'edit'} size={16} />
@@ -497,7 +504,17 @@
 							</td>
 						</tr>
 					{:else}
-						{#each filteredExpenses as expense}
+						{#each filteredExpenses as expense, index}
+                            {#if dailyExpenseTotals[expense.date].firstIndex === index}
+                                <tr class="daily-expense-total">
+                                    <td colspan={5 + (showEmployee ? 1 : 0) + (showOwner ? 1 : 0) + (showActions ? 1 : 0)}>
+                                        <div class="daily-total-content">
+                                            <span class="daily-total-label"><Icon name="expenses" size={13} />Total expense: <time datetime={expense.date}>{formatShortDate(expense.date)}</time></span>
+                                            <span class="daily-total-value"><strong>{formatINR(dailyExpenseTotals[expense.date].amount)}</strong><span class="daily-total-count">({dailyExpenseTotals[expense.date].count} {dailyExpenseTotals[expense.date].count === 1 ? 'entry' : 'entries'})</span></span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {/if}
 							<tr class:editing={editingId === expense.id}>
 								<td>
 									{#if editingId === expense.id}
@@ -589,6 +606,7 @@
 							</td>
 						{/if}
 							</tr>
+
 						{/each}
 					{/if}
 				</tbody>
@@ -598,6 +616,59 @@
 </section>
 
 <style>
+    .list-header .entry-summary {
+        font-size: 15px;
+        font-weight: 750;
+        color: var(--text-strong);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .daily-expense-total td {
+        padding: 8px 15px;
+        background: color-mix(in srgb, var(--danger) 4%, var(--panel-bg));
+        border-bottom: 1px solid var(--border);
+    }
+
+    .daily-total-content, .daily-total-label, .daily-total-value {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .daily-total-content {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        gap: 10px;
+        font-size: 10px;
+    }
+
+    .daily-total-label {
+        color: var(--muted);
+        font-weight: 550;
+    }
+
+    .daily-total-label time {
+        color: var(--text);
+        font-weight: 650;
+    }
+
+    .daily-total-value {
+        gap: 14px;
+        white-space: nowrap;
+    }
+
+    .daily-total-count {
+        color: var(--muted);
+        font-size: 9px;
+    }
+
+    .daily-total-value strong {
+        color: var(--danger);
+        font-size: 12px;
+        font-weight: 750;
+        font-variant-numeric: tabular-nums;
+    }
+
 	.entry-panel {
 		border-left: 4px solid var(--danger);
 	}

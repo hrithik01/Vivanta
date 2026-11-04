@@ -8,10 +8,61 @@
 	import { toast } from '$lib/stores/toast.js';
 	import { EXPENSE_PAYMENT_TYPES, formatExpensePaymentType } from '$lib/expense-payment.js';
 	import { formatINR, formatShortDate } from '$lib/ui-utils.js';
+	import { getMonthRange, isReportDate } from '$lib/report-period.js';
 
 	const today = new Date().toISOString().slice(0, 10);
 	let startDate = today;
 	let endDate = today;
+    let useMonth = false;
+    let reportMonth = new Date().getMonth() + 1;
+    let reportYear = new Date().getFullYear();
+    let customStartDate = today;
+    let customEndDate = today;
+    let downloadingOverview = false;
+    const monthOptions = Array.from({ length: 12 }, (_, index) => ({
+        value: index + 1,
+        label: new Intl.DateTimeFormat('en', { month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2026, index, 1)))
+    }));
+    $: if (useMonth) {
+        const range = getMonthRange(reportYear, reportMonth);
+        if (range) { startDate = range.start; endDate = range.end; }
+    }
+
+    const toggleMonth = (event) => {
+        if (event.currentTarget.checked) { customStartDate = startDate; customEndDate = endDate; }
+        else { startDate = customStartDate; endDate = customEndDate; }
+    };
+
+    const validRange = () => {
+        if ((useMonth && !getMonthRange(reportYear, reportMonth)) || !isReportDate(startDate) || !isReportDate(endDate) || startDate > endDate) {
+            toast.error('Choose valid dates or a month and year, with the start before the end.');
+            return false;
+        }
+        return true;
+    };
+
+    const downloadOverview = async () => {
+        if (!validRange()) return;
+        downloadingOverview = true;
+        const rangeStart = startDate, rangeEnd = endDate;
+        try {
+            const params = new URLSearchParams({ start: rangeStart, end: rangeEnd });
+            const res = await fetch(`/api/reports/overview.pdf?${params}`);
+            if (!res.ok) {
+                const error = await res.json().catch(() => ({}));
+                throw new Error(error.error || 'Unable to download the overview.');
+            }
+            const url = URL.createObjectURL(await res.blob());
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `hotel-overview-${rangeStart}-to-${rangeEnd}.pdf`;
+            document.body.appendChild(link);
+            link.click(); link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            toast.success('PDF overview downloaded.');
+        } catch (error) { toast.error(error.message || 'Unable to download the overview.'); }
+        finally { downloadingOverview = false; }
+    };
 	let expenseTypes = [];
 	let paymentMode = 'all';
 	let expenseTypeId = 'all';
@@ -35,28 +86,28 @@
 	};
 
 	const runReport = async () => {
+		if (!validRange()) return;
 		if (!includeIncome && !includeExpense) {
 			report = null;
 			toast.warning('Select income, expense, or both before running the report.');
 			return;
 		}
 		running = true;
-		const res = await fetch(
-			`/api/reports?start=${startDate}&end=${endDate}&paymentMode=${paymentMode}&expenseTypeId=${expenseTypeId}&includeIncome=${includeIncome}&includeExpense=${includeExpense}`
-		);
-		if (res.ok) {
-			report = await res.json();
-		} else {
-			const error = await res.json();
-			toast.error(error.error || 'Failed to run report.');
-		}
-		running = false;
+        try {
+            const res = await fetch(`/api/reports?start=${startDate}&end=${endDate}&paymentMode=${paymentMode}&expenseTypeId=${expenseTypeId}&includeIncome=${includeIncome}&includeExpense=${includeExpense}`);
+            if (!res.ok) {
+                const error = await res.json().catch(() => ({}));
+                throw new Error(error.error || 'Failed to run report.');
+            }
+            report = await res.json();
+        } catch (error) { toast.error(error.message || 'Failed to run report.'); }
+        finally { running = false; }
 	};
 
 	const exportCSV = () => {
 		if (!report) return;
 		const rows = [];
-		rows.push(['Hotel Ledger Report', `${startDate} to ${endDate}`]);
+		rows.push(['Hotel Ledger Report', `${report.start} to ${report.end}`]);
 		rows.push([]);
 		if (report.includeIncome) {
 			rows.push(['Income Entries']);
@@ -78,7 +129,7 @@
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url;
-		a.download = `ledger-report-${startDate}-to-${endDate}.csv`;
+		a.download = `ledger-report-${report.start}-to-${report.end}.csv`;
 		a.click();
 		URL.revokeObjectURL(url);
 		toast.success('Report exported as CSV.');
@@ -100,12 +151,12 @@
 			<h2>Reports</h2>
 			<p class="muted">Get totals and all entries for any date range with income/expense filters.</p>
 		</div>
-		{#if report}
-			<button class="secondary" on:click={exportCSV}>
-				<Icon name="save" size={18} />
-				Export CSV
-			</button>
-		{/if}
+        <div class="report-export-actions">
+            <button on:click={downloadOverview} disabled={downloadingOverview}><Icon name="bill" size={17} />{downloadingOverview ? 'Preparing PDF…' : 'Download PDF overview'}</button>
+            {#if report}
+                <button class="secondary" on:click={exportCSV} disabled={running}><Icon name="save" size={17} />Export CSV</button>
+            {/if}
+        </div>
 	</div>
 
 	<div class="form-grid">
@@ -121,13 +172,21 @@
 				<span>Expense</span>
 			</label>
 		</div>
+        <div class="report-period-options wide">
+            <label class="check-option" class:active={useMonth}><input type="checkbox" bind:checked={useMonth} on:change={toggleMonth} /><Icon name="calendar" size={16} /><span>Select a month</span></label>
+            <span class="muted">{useMonth ? 'The full calendar month is selected automatically.' : 'Choose a custom date range, or select a month.'}</span>
+        </div>
+        {#if useMonth}
+            <label><span>Month</span><select bind:value={reportMonth}>{#each monthOptions as month}<option value={month.value}>{month.label}</option>{/each}</select></label>
+            <label><span>Year</span><input type="number" min="1900" max="9999" step="1" bind:value={reportYear} /></label>
+        {/if}
 		<label>
 			<span>Start Date</span>
-			<input type="date" bind:value={startDate} />
+			<input type="date" bind:value={startDate} disabled={useMonth} />
 		</label>
 		<label>
 			<span>End Date</span>
-			<input type="date" bind:value={endDate} />
+			<input type="date" bind:value={endDate} disabled={useMonth} />
 		</label>
 		{#if includeIncome || includeExpense}
 			<label>
@@ -155,6 +214,7 @@
 		<Icon name="reports" size={18} />
 		{running ? 'Running…' : 'Run Report'}
 	</button>
+    <p class="pdf-overview-hint muted">PDF overview includes all income and expense types for the selected dates. Table filters apply to the on-screen report and CSV.</p>
 </section>
 
 <HisabDistributor />
@@ -403,6 +463,13 @@
 {/if}
 
 <style>
+    .report-export-actions, .report-period-options { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .report-period-options > span, .pdf-overview-hint { font-size: 11px; }
+    .report-period-options .check-option { border-radius: 7px; padding: 9px 12px; }
+    .report-period-options .check-option span { font-size: 12px; }
+    .pdf-overview-hint { margin: 12px 0 0; }
+    input:disabled { color: var(--muted); background: var(--secondary-bg); }
+
 	.report-header {
 		margin-bottom: 0.5rem;
 	}

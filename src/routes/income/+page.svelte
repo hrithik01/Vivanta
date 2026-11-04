@@ -1,5 +1,6 @@
 <script>
 	// @ts-nocheck
+	import PageHeading from '$lib/components/PageHeading.svelte';
 	import { onMount } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
@@ -286,6 +287,8 @@
 	on:confirm={deleteIncome}
 	on:cancel={() => (confirmOpen = false)}
 />
+
+<PageHeading eyebrow="RECEIVABLES" title="Income" description="Record guest payments and keep every receipt accounted for." />
 
 <section class="panel entry-panel">
 	<div class="row">

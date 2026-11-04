@@ -1,10 +1,11 @@
 <script>
+	import Icon from '$lib/components/Icon.svelte';
 	export let message = 'No data yet.';
 	export let icon = '📭';
 </script>
 
 <div class="empty-state">
-	<span class="empty-icon" aria-hidden="true">{icon}</span>
+	<span class="empty-icon" aria-hidden="true"><Icon name={icon === '🏨' ? 'hotel' : icon === '✅' ? 'todo' : icon === '🧾' ? 'bill' : 'reports'} size={24} /></span>
 	<p class="muted">{message}</p>
 </div>
 
@@ -17,14 +18,20 @@
 		padding: 2.5rem 1rem;
 		gap: 0.75rem;
 		text-align: center;
-		border-radius: 20px;
+		border-radius: 8px;
 		border: 1px dashed var(--border);
-		background: rgba(255, 255, 255, 0.25);
+		background: var(--secondary-bg);
 	}
 
 	.empty-icon {
-		font-size: 2rem;
-		opacity: 0.7;
+		color: var(--muted);
+		display: grid;
+		place-items: center;
+		width: 46px;
+		height: 46px;
+		background: var(--card-bg);
+		border: 1px solid var(--border);
+		border-radius: 12px;
 	}
 
 	.empty-state p {

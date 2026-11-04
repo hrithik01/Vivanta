@@ -1,5 +1,6 @@
 <script>
 	// @ts-nocheck
+	import PageHeading from '$lib/components/PageHeading.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import Icon from '$lib/components/Icon.svelte';
@@ -273,6 +274,8 @@
 	}}
 	on:cancel={() => (confirmOpen = false)}
 />
+
+<PageHeading eyebrow="PROPERTY SETTINGS" title="Masters & configuration" description="Keep your property, opening balances, and accounting categories in order." />
 
 <section class="panel property-panel">
 	<div class="row">

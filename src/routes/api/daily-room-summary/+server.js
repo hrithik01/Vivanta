@@ -13,6 +13,7 @@ const parseJson = (value, fallback = {}) => {
 };
 
 const normalizeRoomDetail = (value = {}) => ({
+	is_active: typeof value?.is_active === 'boolean' ? value.is_active : Boolean(value?.notes?.trim() || value?.check_in_date || (value?.tariff_per_day !== '' && value?.tariff_per_day != null) || (value?.amount_received !== '' && value?.amount_received != null)),
 	notes: String(value?.notes || '').trim(),
 	check_in_date: value?.check_in_date ? String(value.check_in_date).trim() : '',
 	tariff_per_day: value?.tariff_per_day === '' || value?.tariff_per_day == null ? null : Number(value.tariff_per_day),
@@ -70,6 +71,10 @@ export const PUT = async ({ request }) => {
 		return json({ error: 'Invalid room number.' }, { status: 400 });
 	}
 
+	if (body.is_active !== undefined && typeof body.is_active !== 'boolean') {
+		return json({ error: 'Room status must be true or false.' }, { status: 400 });
+	}
+
 	if (body.check_in_date && !/^\d{4}-\d{2}-\d{2}$/.test(String(body.check_in_date))) {
 		return json({ error: 'Check-in date must be valid.' }, { status: 400 });
 	}
@@ -94,6 +99,7 @@ export const PUT = async ({ request }) => {
 	const roomData = readRoomData(baseRow);
 	const current = normalizeRoomDetail(roomData[roomValue]);
 	roomData[roomValue] = {
+		is_active: body.is_active === undefined ? current.is_active : body.is_active,
 		notes: body.notes == null ? current.notes : String(body.notes).trim(),
 		check_in_date: body.check_in_date == null ? current.check_in_date : String(body.check_in_date).trim(),
 		tariff_per_day: body.tariff_per_day === undefined ? current.tariff_per_day : tariffPerDay,

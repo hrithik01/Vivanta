@@ -54,7 +54,32 @@
 			'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4h-7v-2h7v2zm0-4H7V7h10v2zM9 11H7V9h2v2zm0 4H7v-2h2v2z'
 	};
 
-	$: d = paths[name] || '';
+ /** @type {Record<string, string>} */
+ const outlines = {
+  eraser: 'M15 3l6 6a2 2 0 0 1 0 3l-8 8H7l-5-5a2 2 0 0 1 0-3L12 3a2 2 0 0 1 3 0z M7 7l10 10 M13 20h9',
+  dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
+  income: 'M7 3v12m-4-4 4 4 4-4 M13 5h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1',
+  expenses: 'M7 15V3m-4 4 4-4 4 4 M13 5h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1',
+  hotel: 'M3 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16 M17 9h3a1 1 0 0 1 1 1v11 M1 21h22 M7 7h2 M11 7h2 M7 11h2 M11 11h2 M8 21v-5h4v5',
+  reports: 'M4 3h12l4 4v14H4z M15 3v5h5 M8 16v2 M12 12v6 M16 10v8',
+  masters: 'M4 6h16 M4 12h16 M4 18h16 M8 3v6 M16 9v6 M10 15v6',
+  calculator: 'M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z M8 6h8v4H8z M8 14h1 M15 14h1 M8 18h1 M15 18h1',
+  bill: 'M5 3h14v18l-3-2-4 2-4-2-3 2z M9 7h6 M9 11h6 M9 15h3',
+  calendar: 'M4 5h16v16H4z M8 3v4 M16 3v4 M4 10h16',
+  todo: 'M9 5h11 M9 12h11 M9 19h11 M3 5l1 1 2-3 M3 12l1 1 2-3 M3 19l1 1 2-3',
+  plus: 'M12 5v14 M5 12h14',
+  search: 'M21 21l-5-5 M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
+  edit: 'M12 5H4v16h16v-8 M15 3l6 6 M9 15l2-6 8-8 4 4-8 8z',
+  trash: 'M3 6h18 M9 6V3h6v3 M5 6l1 15h12l1-15 M10 10v7 M14 10v7',
+  moon: 'M21 13a9 9 0 0 1-10-10A9 9 0 1 0 21 13',
+  menu: 'M4 6h16 M4 12h16 M4 18h16',
+  close: 'M6 6l12 12 M6 18 18 6',
+  chevron: 'M9 5l7 7-7 7',
+  check: 'M4 12l5 5L20 6'
+ };
+
+	$: outline = outlines[name];
+	$: d = outline || paths[name] || '';
 </script>
 
 {#if d}
@@ -62,7 +87,11 @@
 		width={size}
 		height={size}
 		viewBox="0 0 24 24"
-		fill="currentColor"
+		fill={outline ? 'none' : 'currentColor'}
+		stroke={outline ? 'currentColor' : 'none'}
+		stroke-width="1.65"
+		stroke-linecap="round"
+		stroke-linejoin="round"
 		aria-hidden="true"
 		style="flex-shrink: 0;"
 	>

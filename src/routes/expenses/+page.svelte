@@ -1,5 +1,6 @@
 <script>
 	// @ts-nocheck
+	import PageHeading from '$lib/components/PageHeading.svelte';
 	import { onMount } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
@@ -37,6 +38,7 @@
 	let editingId = null;
 	let expenseTypeFilter = 'all';
 	let employeeFilter = 'all';
+	let paymentModeFilter = 'all';
 	let showActions = true;
 	let showEmployee = false;
 	let showOwner = false;
@@ -292,7 +294,8 @@
 	$: filteredExpenses = expenseList.filter((expense) => {
 		const matchesType = expenseTypeFilter === 'all' || String(expense.expense_type_id) === String(expenseTypeFilter);
 		const matchesEmployee = employeeFilter === 'all' || String(expense.employee_id) === String(employeeFilter);
-		return matchesType && matchesEmployee;
+		const matchesPaymentMode = paymentModeFilter === 'all' || expense.payment_type === paymentModeFilter;
+		return matchesType && matchesEmployee && matchesPaymentMode;
 	});
 	$: expenseSummary = {
 		count: filteredExpenses.length,
@@ -310,6 +313,8 @@
 	on:confirm={deleteExpense}
 	on:cancel={() => (confirmOpen = false)}
 />
+
+<PageHeading eyebrow="PAYABLES" title="Expenses" description="Manage daily spending, staff payments, and owner payouts." />
 
 <section class="panel entry-panel">
 	<div class="row">
@@ -419,6 +424,14 @@
 				{#each expenseTypes as type}
 					<option value={type.id}>{type.name}</option>
 				{/each}
+			</select>
+		</label>
+		<label>
+			<span>Payment Mode</span>
+			<select bind:value={paymentModeFilter}>
+				<option value="all">All</option>
+				<option value="cash">Cash</option>
+				<option value="online">Online</option>
 			</select>
 		</label>
 		{#if showEmployeeFilter}

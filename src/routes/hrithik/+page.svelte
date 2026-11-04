@@ -1,5 +1,6 @@
 <script>
 	// @ts-nocheck
+	import PageHeading from '$lib/components/PageHeading.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import Icon from '$lib/components/Icon.svelte';
@@ -185,6 +186,8 @@
 	on:confirm={deleteTransaction}
 	on:cancel={() => (confirmOpen = false)}
 />
+
+<PageHeading eyebrow="PERSONAL ACCOUNTS" title="Personal ledger" description="A clear view of your personal cash, online payments, and balances." />
 
 <section class="panel">
 	<div class="row">

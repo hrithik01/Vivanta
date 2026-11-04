@@ -1,5 +1,6 @@
 <script>
 	import { createEventDispatcher } from 'svelte';
+	import { modalFocus } from '$lib/modal-focus.js';
 	import { fade, scale } from 'svelte/transition';
 
 	export let open = false;
@@ -41,6 +42,7 @@
 		<!-- svelte-ignore a11y-no-static-element-interactions -->
 		<div
 			class="modal-card"
+			use:modalFocus={cancel}
 			transition:scale={{ duration: 180, start: 0.96 }}
 			on:click|stopPropagation
 			on:keydown|stopPropagation
@@ -70,7 +72,7 @@
 	.modal-card {
 		background: var(--card-bg);
 		border: 1px solid var(--border);
-		border-radius: 24px;
+		border-radius: 12px;
 		padding: 1.5rem;
 		max-width: 420px;
 		width: 100%;

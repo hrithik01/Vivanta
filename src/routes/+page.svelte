@@ -3,11 +3,12 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import Icon from '$lib/components/Icon.svelte';
+	import InvoicePreview from '$lib/components/InvoicePreview.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 	import { toast } from '$lib/stores/toast.js';
 	import { formatINR } from '$lib/ui-utils.js';
-	import { amountInWords, calculateStayDays, computeInvoiceTotals, getInvoiceProfile, openInvoicePrint } from '$lib/invoice.js';
+	import { amountInWords, buildInvoiceHtml, calculateStayDays, computeInvoiceTotals, getInvoiceProfile, openInvoicePrint } from '$lib/invoice.js';
 
 	const today = new Date().toISOString().slice(0, 10);
 	let selectedDate = today;
@@ -35,6 +36,7 @@
 	let billDraftDone = false;
 	let loading = true;
 	let savingRoom = null;
+	let roomToClear = null;
 	let clearingRoomSummary = false;
 	let clearRoomSummaryOpen = false;
 	let savingBoard = false;
@@ -107,9 +109,20 @@
 	let invCgstOverride = '';
 	let invSgstOverride = '';
 	let invTotalOverride = '';
-	let invPaper = 'A5';
+	let invPaper = 'A4';
+    let invCustomerAddress = '';
+    let invCustomerState = '';
+    let invCustomerPhone = '';
+    let invPlaceOfSupply = '';
+    let invSac = '996311';
+    let invReverseCharge = false;
+    let invAmountPaid = '';
+    let invPaymentMode = '';
+    let invPaymentReference = '';
+    let invNotes = '';
+    let invoicePreviewOpen = false;
 
-	$: invoiceProfile = getInvoiceProfile($page.data?.hotel);
+	$: invoiceProfile = getInvoiceProfile($page.data?.hotel, $page.data?.hotelName);
 
 	// Qty is the nights between check-in and check-out, plus one extra day when
 	// the guest checks out after 12:00 PM.
@@ -127,6 +140,20 @@
 	});
 
 	$: invoiceWords = amountInWords(invoiceTotals.grandTotal);
+    $: invoiceBalance = Math.max(0, Math.round((invoiceTotals.grandTotal - (Number(invAmountPaid) || 0)) * 100) / 100);
+    $: invoiceAdjustment = Math.round((invoiceTotals.grandTotal - invoiceTotals.subTotal - invoiceTotals.cgst - invoiceTotals.sgst) * 100) / 100;
+    $: invoiceDraft = {
+        billNo: invBillNo.trim(), billDate: invBillDate,
+        customerName: invCustomerName.trim(), companyName: invCompanyName.trim(), customerGstin: invCustomerGstin.trim(),
+        customerAddress: invCustomerAddress.trim(), customerState: invCustomerState.trim(), customerPhone: invCustomerPhone.trim(),
+        placeOfSupply: invPlaceOfSupply.trim() || invoiceProfile.state, sac: invSac.trim(), reverseCharge: invReverseCharge,
+        arrivalDate: invArrivalDate, arrivalTime: invArrivalTime, departureDate: invDepartureDate, departureTime: invDepartureTime,
+        roomNo: invRoomNo.trim(), persons: invPersons, particulars: invParticulars.trim(), roomType: invRoomType.trim(),
+        qty: invQty, unit: invUnit, rate: Number(invRate), cgstRate: Number(invCgstRate) || 0, sgstRate: Number(invSgstRate) || 0,
+        cgstOverride: invCgstOverride, sgstOverride: invSgstOverride, totalOverride: invTotalOverride, paper: invPaper,
+        amountPaid: Number(invAmountPaid) || 0, paymentMode: invPaymentMode, paymentReference: invPaymentReference.trim(), notes: invNotes.trim()
+    };
+    $: invoicePreviewHtml = invoicePreviewOpen ? buildInvoiceHtml({ ...invoiceDraft, preview: true }, invoiceProfile) : '';
 
 	const scrollToGstInvoice = () => {
 		document.getElementById('gst-invoice-generator')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -160,52 +187,35 @@
 		invCgstOverride = '';
 		invSgstOverride = '';
 		invTotalOverride = '';
+        invCustomerAddress = ''; invCustomerState = ''; invCustomerPhone = '';
+        invPlaceOfSupply = ''; invSac = '996311'; invReverseCharge = false;
+        invAmountPaid = ''; invPaymentMode = ''; invPaymentReference = ''; invNotes = '';
 	};
 
 	const generateInvoicePdf = () => {
-		if (!invCustomerName.trim()) {
-			toast.error('Customer name is required.');
-			return;
-		}
-		if (!(Number(invRate) > 0)) {
-			toast.error('Enter a tariff rate greater than zero.');
-			return;
-		}
-		if (!(invQty > 0)) {
-			toast.error('Departure date must be after the arrival date.');
-			return;
-		}
-
-		const opened = openInvoicePrint(
-			{
-				billNo: invBillNo.trim(),
-				billDate: invBillDate,
-				customerName: invCustomerName.trim(),
-				companyName: invCompanyName.trim(),
-				customerGstin: invCustomerGstin.trim(),
-				arrivalDate: invArrivalDate,
-				arrivalTime: invArrivalTime,
-				departureDate: invDepartureDate,
-				departureTime: invDepartureTime,
-				roomNo: invRoomNo.trim(),
-				persons: invPersons,
-				particulars: invParticulars.trim(),
-				roomType: invRoomType.trim(),
-				qty: invQty,
-				unit: invUnit,
-				rate: Number(invRate),
-				cgstRate: Number(invCgstRate) || 0,
-				sgstRate: Number(invSgstRate) || 0,
-				cgstOverride: invCgstOverride,
-				sgstOverride: invSgstOverride,
-				totalOverride: invTotalOverride,
-				paper: invPaper
-			},
-			invoiceProfile
-		);
-
-		if (!opened) toast.error('Allow pop-ups for this site to generate the invoice.');
-	};
+        const gstinPattern = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+        const issues = [];
+        if (!invoiceProfile.name.trim() || !invoiceProfile.address.trim() || !gstinPattern.test(invoiceProfile.gstin)) issues.push('Enter the supplier name, address, and a valid GSTIN in Hotel letterhead.');
+        if (!/^[A-Za-z0-9/-]{1,16}$/.test(invBillNo.trim())) issues.push('Enter an invoice number of up to 16 characters using letters, numbers, / or -.');
+        if (!invBillDate) issues.push('Enter the invoice date.');
+        if (!invCustomerName.trim()) issues.push('Enter the customer name.');
+        if (invCustomerGstin && !gstinPattern.test(invCustomerGstin.trim())) issues.push('Enter a valid 15-character customer GSTIN or leave it blank.');
+        if ((invCustomerGstin || invoiceTotals.grandTotal >= 50000) && (!invCustomerAddress.trim() || !invCustomerState.trim())) issues.push('Enter the customer billing address and state / code.');
+        if (!/^\d{4,8}$/.test(invSac.trim())) issues.push('Enter the applicable 4–8 digit SAC service code.');
+        if (!(invPlaceOfSupply.trim() || invoiceProfile.state)) issues.push('Enter the place of supply and state code.');
+        if (!invStay.valid || !(invQty > 0)) issues.push('Check the arrival and departure dates.');
+        if (!invArrivalTime || !invDepartureTime) issues.push('Enter arrival and departure times.');
+        if (!Number.isFinite(Number(invRate)) || !(Number(invRate) > 0)) issues.push('Enter a tariff greater than zero.');
+        if (!Number.isInteger(Number(invPersons)) || Number(invPersons) < 1) issues.push('Enter at least one guest.');
+        for (const [label, value] of [['CGST rate', invCgstRate], ['SGST rate', invSgstRate]]) {
+            if (value === '' || value == null || !Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 100) issues.push(`${label} must be between 0 and 100.`);
+        }
+        for (const [label, value] of [['CGST override', invCgstOverride], ['SGST override', invSgstOverride], ['Total override', invTotalOverride], ['Amount received', invAmountPaid]]) {
+            if (value !== '' && value != null && (!Number.isFinite(Number(value)) || Number(value) < 0)) issues.push(`${label} must be zero or greater.`);
+        }
+        if (issues.length) { toast.error(issues[0]); return; }
+        if (!openInvoicePrint(invoiceDraft, invoiceProfile)) toast.error('Allow pop-ups for this site to generate the invoice.');
+    };
 
 	const loadSummary = async () => {
 		const [summaryRes, masterRes] = await Promise.all([
@@ -266,29 +276,59 @@
 	};
 
 	const saveRoomSummary = async (room) => {
-		roomMessage = '';
-		savingRoom = room.room_number;
-		const res = await fetch('/api/daily-room-summary', {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				room_number: room.room_number,
-				notes: room.notes || '',
-				check_in_date: room.check_in_date || '',
-				tariff_per_day: room.tariff_per_day ?? '',
-				amount_received: room.amount_received ?? ''
-			})
-		});
-		savingRoom = null;
-		if (res.ok) {
-			const data = await res.json();
-			roomSummaryDate = data.date || roomSummaryDate;
-			toast.success('Room summary saved.');
-		} else {
-			const error = await res.json();
-			toast.error(error.error || 'Failed to update room summary.');
-		}
-	};
+        roomMessage = '';
+        savingRoom = room.room_number;
+        try {
+            const res = await fetch('/api/daily-room-summary', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    room_number: room.room_number,
+                    notes: room.notes || '',
+                    check_in_date: room.check_in_date || '',
+                    tariff_per_day: room.tariff_per_day ?? '',
+                    amount_received: room.amount_received ?? '',
+                    is_active: room.is_active
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || 'Failed to update room summary.');
+            roomSummaryDate = data.date || roomSummaryDate;
+            toast.success('Room summary saved.');
+            return true;
+        } catch (error) {
+            toast.error(error.message || 'Unable to save room. Please try again.');
+            return false;
+        } finally {
+            savingRoom = null;
+        }
+    };
+
+    const toggleRoomStatus = async (room) => {
+        const isActive = !room.is_active;
+        const remarks = String(room.notes || '').trim();
+        const notes = isActive
+            ? (/\bOCCUPIED\b/i.test(remarks) ? remarks : ['OCCUPIED', remarks].filter(Boolean).join(' · '))
+            : remarks.replace(/^OCCUPIED(?:\s*·\s*|$)/i, '');
+        const updated = {
+            ...room,
+            is_active: isActive,
+            notes,
+            check_in_date: isActive && !room.check_in_date ? formatDateLocal(new Date()) : room.check_in_date
+        };
+        if (await saveRoomSummary(updated)) {
+            roomSummary = roomSummary.map((item) => item.room_number === room.room_number ? updated : item);
+        }
+    };
+
+    const clearRoomEntry = async () => {
+        if (!roomToClear) return;
+        const updated = { ...roomToClear, notes: '', check_in_date: '', tariff_per_day: null, amount_received: null, is_active: false };
+        if (await saveRoomSummary(updated)) {
+            roomSummary = roomSummary.map((item) => item.room_number === updated.room_number ? updated : item);
+            roomToClear = null;
+        }
+    };
 
 	const clearAllRoomNotes = async () => {
 		clearingRoomSummary = true;
@@ -307,7 +347,8 @@
 				notes: '',
 				check_in_date: '',
 				tariff_per_day: null,
-				amount_received: null
+				amount_received: null,
+				is_active: false
 			}));
 			toast.success('All room notes cleared.');
 		} else {
@@ -412,11 +453,21 @@
 	on:cancel={() => (clearRoomSummaryOpen = false)}
 />
 
+<ConfirmModal
+    open={roomToClear !== null}
+    title={`Clear room ${roomToClear?.room_number || ''}?`}
+    message="Clear this room’s check-in date, tariff, amount received, and notes, and reset its status to inactive. Hotel income and expense records stay unchanged."
+    confirmLabel="Clear room entry"
+    danger={true}
+    on:confirm={clearRoomEntry}
+    on:cancel={() => (roomToClear = null)}
+/>
+
 <section class="hero-panel">
 	<div>
-		<p class="brand-eyebrow">Front Office Snapshot</p>
-		<h2>Daily Overview</h2>
-		<p class="muted hero-copy">Keep the ledger clear across room income, bills, balances, and daily stay notes.</p>
+		<p class="brand-eyebrow">YOUR PROPERTY AT A GLANCE</p>
+		<h1>Daily overview</h1>
+		<p class="muted hero-copy">A clear picture of your hotel’s finances. Every day, every detail.</p>
 	</div>
 	<div class="hero-actions">
 		<label class="date-chip">
@@ -437,6 +488,15 @@
 		</button>
 	</div>
 </section>
+
+<nav class="section-jumps" aria-label="Overview sections">
+ <span>QUICK ACCESS</span>
+ <a href="#daily-room-summary"><Icon name="hotel" size={13} /> Room summary</a>
+ <a href="#days-calculator"><Icon name="calculator" size={13} /> Stay calculator</a>
+ <a href="#gst-invoice-generator"><Icon name="bill" size={13} /> GST invoice</a>
+ <a href="#front-desk-todos"><Icon name="todo" size={13} /> To-dos</a>
+ <a href="#pending-bills"><Icon name="expenses" size={13} /> Pending bills</a>
+</nav>
 
 {#if loading}
 	<div class="panel shimmer-panel" aria-label="Loading dashboard data">
@@ -492,8 +552,10 @@
 	</div>
 
 	<div class="grid">
-		<div class="card">
-			<h3>Totals</h3>
+		<div class="card day-net-card">
+            <span class="net-eyebrow">DAILY NET MOVEMENT</span>
+            <p class="net-amount">{formatINR(netPosition)}</p>
+            <p class="net-caption">Income less expenses · selected date</p>
 			<ul class="metric-list">
 				<li>
 					<span>Total Income</span>
@@ -507,6 +569,10 @@
 		</div>
 		<div class="card">
 			<h3>Cash vs Online</h3>
+            <div class="receipt-split" aria-label="Income split: cash and online">
+                <div class="receipt-track"><span style:width={`${summary.total_income > 0 ? Math.min(100, Math.max(0, summary.cash_income / summary.total_income * 100)) : 0}%`}></span></div>
+                <div class="receipt-legend"><span><i></i>Cash receipts</span><span><i></i>Online receipts</span></div>
+            </div>
 			<ul class="metric-list">
 				<li>
 					<span>Cash Income</span>
@@ -529,7 +595,7 @@
 	</div>
 </section>
 
-<section class="panel">
+<section class="panel" id="daily-room-summary">
 	<div class="section-header">
 		<div>
 			<h2>Daily Room Summary</h2>
@@ -537,10 +603,11 @@
 		</div>
 		<div class="summary-actions">
 			<div class="pill-note">Auto-save on exit</div>
+			<span class="room-status-legend"><span class="room-status-dot"></span> Green = occupied · click to toggle</span>
 			<button
 				class="ghost danger-text clear-summary-button"
 				on:click={() => (clearRoomSummaryOpen = true)}
-				disabled={clearingRoomSummary || roomSummary.length === 0}
+				disabled={clearingRoomSummary || savingRoom !== null || roomSummary.length === 0}
 			>
 				<Icon name="trash" size={15} />
 				Clear all
@@ -554,73 +621,97 @@
 		</p>
 	{/if}
 	<div class="table-wrap">
-		<table>
+		<table class="room-summary-table">
 			<thead>
 				<tr>
 					<th>Room</th>
+					<th style="width: 90px;">Status</th>
 					<th>Check-in date</th>
-					<th>Tariff / day</th>
-					<th>Amount received</th>
-					<th>Notes</th>
-					<th style="width: 60px;">Status</th>
+					<th class="room-amount-column">Tariff / day</th>
+					<th class="room-amount-column">Amount received</th>
+					<th>Remarks</th>
+					<th style="width: 64px;">Clear</th>
 				</tr>
 			</thead>
 			<tbody>
 				{#if roomSummary.length === 0}
 					<tr>
-						<td colspan="6">
+						<td colspan="7">
 							<EmptyState message="No rooms configured for this property." icon="🏨" />
 						</td>
 					</tr>
 				{:else}
 					{#each roomSummary as room}
 						<tr>
-							<td class="room-cell">{room.room_number}</td>
+							<td class="room-cell"><span class="room-number" class:is-occupied={room.is_active}>{room.room_number}</span></td>
+							<td class="status-cell">
+                                <button
+                                    class="room-status-button"
+                                    class:is-active={room.is_active}
+                                    aria-label={`Room ${room.room_number}: ${room.is_active ? 'occupied' : 'vacant'}. Click to mark ${room.is_active ? 'vacant' : 'occupied'}.`}
+                                    aria-pressed={Boolean(room.is_active)}
+                                    title={room.is_active ? 'Occupied — click to mark vacant' : 'Vacant — click to mark occupied'}
+                                    disabled={savingRoom !== null || clearingRoomSummary}
+                                    on:click={() => toggleRoomStatus(room)}
+                                >
+                                    <span class="room-status-dot" class:is-saving={savingRoom === room.room_number}></span>
+                                </button>
+                            </td>
+
 							<td>
 								<input
 									type="date"
+									aria-label={`Room ${room.room_number} check-in date`}
 									bind:value={room.check_in_date}
 									on:change={() => saveRoomSummary(room)}
 								/>
 							</td>
-							<td>
+							<td class="room-amount-column">
 								<input
 									type="number"
 									min="0"
 									step="1"
 									placeholder="0"
+									aria-label={`Room ${room.room_number} tariff per day`}
 									bind:value={room.tariff_per_day}
 									on:blur={() => saveRoomSummary(room)}
 								/>
 							</td>
-							<td>
+							<td class="room-amount-column">
 								<input
 									type="number"
 									min="0"
 									step="1"
 									placeholder="0"
+									aria-label={`Room ${room.room_number} amount received`}
 									bind:value={room.amount_received}
 									on:blur={() => saveRoomSummary(room)}
 								/>
 							</td>
 							<td class="notes-cell">
-								<input
+								<div class="room-remarks-editor">
+                                    {#if /^OCCUPIED(?:\s*·\s*|$)/i.test(room.notes || '')}
+                                        <span class="occupied-remark">OCCUPIED</span>
+                                    {/if}
+                                    <input
 									type="text"
-									placeholder="Add notes for room {room.room_number}"
-									bind:value={room.notes}
+									aria-label={`Remarks for room ${room.room_number}`}
+									placeholder="Add remarks for room {room.room_number}"
+									value={String(room.notes || '').replace(/^OCCUPIED(?:\s*·\s*|$)/i, '')}
+                                    on:input={(event) => {
+                                        const occupied = /^OCCUPIED(?:\s*·\s*|$)/i.test(room.notes || '');
+                                        room.notes = occupied ? ['OCCUPIED', event.currentTarget.value].filter(Boolean).join(' · ') : event.currentTarget.value;
+                                    }}
 									on:blur={() => saveRoomSummary(room)}
 									on:keydown={(e) => e.key === 'Enter' && saveRoomSummary(room)}
 								/>
-							</td>
-							<td class="status-cell">
-								{#if savingRoom === room.room_number}
-									<span class="saving-dot" aria-label="Saving"></span>
-								{:else if room.notes?.trim() || room.check_in_date || room.tariff_per_day != null || room.amount_received != null}
-									<span class="saved-check" aria-label="Saved">✓</span>
-								{:else}
-									<span class="empty-dot" aria-label="No notes"></span>
-								{/if}
-							</td>
+                                </div>
+                            </td>
+                            <td class="status-cell">
+                                <button class="ghost room-clear-button" title={`Clear room ${room.room_number} entry`} aria-label={`Clear room ${room.room_number} entry`} disabled={savingRoom !== null || clearingRoomSummary} on:click={() => (roomToClear = room)}>
+                                    <Icon name="eraser" size={18} />
+                                </button>
+                            </td>
 						</tr>
 					{/each}
 				{/if}
@@ -632,7 +723,7 @@
 	{/if}
 </section>
 
-<section class="panel calculator-panel">
+<section class="panel calculator-panel" id="days-calculator">
 	<div class="section-header">
 		<div>
 			<h2>Days Calculator</h2>
@@ -672,12 +763,16 @@
 	{/if}
 </section>
 
+{#if invoicePreviewOpen}
+    <InvoicePreview html={invoicePreviewHtml} on:close={() => (invoicePreviewOpen = false)} on:print={generateInvoicePdf} />
+{/if}
+
 <section id="gst-invoice-generator" class="panel invoice-panel">
 	<div class="section-header">
 		<div>
-			<h2>Create GST PDF Invoice</h2>
+			<h2>GST tax invoice</h2>
 			<p class="muted">
-				Fill the guest details and print the tax invoice on {invoiceProfile.name} letterhead (GSTIN {invoiceProfile.gstin}).
+				Create a clear, itemized hotel bill. Preview the invoice, then print or save it as PDF.
 			</p>
 		</div>
 		<div class="invoice-actions">
@@ -692,18 +787,29 @@
 		</div>
 	</div>
 
+    <details class="invoice-letterhead">
+        <summary><Icon name="hotel" size={16} />Hotel letterhead <span>{invoiceProfile.name} · {invoiceProfile.gstin || 'Add GSTIN'}</span></summary>
+        <div class="invoice-grid">
+            <label><span>Hotel / supplier name</span><input bind:value={invoiceProfile.name} /></label>
+            <label><span>Supplier GSTIN</span><input maxlength="15" value={invoiceProfile.gstin} on:input={(event) => (invoiceProfile.gstin = event.currentTarget.value.toUpperCase())} /></label>
+            <label class="span-2"><span>Supplier address</span><input bind:value={invoiceProfile.address} /></label>
+            <label><span>Contact numbers</span><input bind:value={invoiceProfile.phones} /></label>
+            <label><span>Signatory / legal business name</span><input bind:value={invoiceProfile.signatoryFor} /></label>
+        </div>
+        <p class="field-hint">Letterhead edits apply to this invoice session.</p>
+    </details>
 	<h3 class="invoice-subhead">Bill &amp; Customer</h3>
 	<div class="invoice-grid">
 		<label>
-			<span>Bill No</span>
-			<input type="text" placeholder="e.g. 124" bind:value={invBillNo} />
+			<span>Invoice number *</span>
+			<input type="text" maxlength="16" placeholder="e.g. V/26-27/124" bind:value={invBillNo} />
 		</label>
 		<label>
 			<span>Bill Date</span>
 			<input type="date" bind:value={invBillDate} />
 		</label>
 		<label>
-			<span>Customer Name (Mr./Mrs.)</span>
+			<span>Customer / guest name *</span>
 			<input type="text" placeholder="e.g. Viswanath Jha" bind:value={invCustomerName} />
 		</label>
 		<label>
@@ -722,6 +828,12 @@
 			/>
 		</label>
 	</div>
+
+    <div class="invoice-grid">
+        <label class="span-2"><span>Billing address</span><input placeholder="Street, city, postal code" bind:value={invCustomerAddress} /></label>
+        <label><span>Customer state / code</span><input placeholder="e.g. Rajasthan (08)" bind:value={invCustomerState} /></label>
+        <label><span>Customer phone (optional)</span><input type="tel" bind:value={invCustomerPhone} /></label>
+    </div>
 
 	<h3 class="invoice-subhead">Stay Details</h3>
 	<div class="invoice-grid">
@@ -802,6 +914,14 @@
 			<span>SGST %</span>
 			<input type="number" min="0" step="0.5" bind:value={invSgstRate} />
 		</label>
+    </div>
+    <div class="invoice-grid">
+        <label><span>SAC / service code *</span><input inputmode="numeric" maxlength="8" placeholder="Applicable accommodation SAC" bind:value={invSac} /></label>
+        <label><span>Place of supply / state code *</span><input placeholder={invoiceProfile.state || 'State name and code'} bind:value={invPlaceOfSupply} /></label>
+        <label><span>Reverse charge</span><select bind:value={invReverseCharge}><option value={false}>No</option><option value={true}>Yes</option></select></label>
+    </div>
+    <p class="field-hint invoice-rate-note">CGST and SGST rates are editable. Use the rates applicable to this stay.</p>
+    <details class="invoice-adjustments"><summary>Manual tax &amp; total adjustments</summary><div class="invoice-grid">
 		<label>
 			<span>CGST Amount (override)</span>
 			<input type="number" min="0" step="0.01" placeholder={invoiceTotals.cgst.toFixed(2)} bind:value={invCgstOverride} />
@@ -815,26 +935,37 @@
 			<input type="number" min="0" step="0.01" placeholder={invoiceTotals.grandTotal.toFixed(2)} bind:value={invTotalOverride} />
 		</label>
 	</div>
+    </details>
+    <h3 class="invoice-subhead">Payment &amp; notes</h3>
+    <div class="invoice-grid">
+        <label><span>Amount received (INR)</span><input type="number" min="0" step="0.01" placeholder="0.00" bind:value={invAmountPaid} /></label>
+        <label><span>Payment mode</span><select bind:value={invPaymentMode}><option value="">Not specified</option><option>Cash</option><option>UPI</option><option>Card</option><option>Bank transfer</option><option>Mixed</option></select></label>
+        <label><span>Payment reference (optional)</span><input placeholder="Receipt / transaction reference" bind:value={invPaymentReference} /></label>
+        <label class="wide"><span>Invoice notes (optional)</span><textarea rows="2" placeholder="Guest requests or additional billing notes" bind:value={invNotes}></textarea></label>
+    </div>
 
 	<div class="invoice-summary">
 		<div class="invoice-summary-lines">
 			<div><span>Sub-Total</span><strong>{formatINR(invoiceTotals.subTotal)}</strong></div>
 			<div><span>CGST ({invCgstRate} %)</span><strong>{formatINR(invoiceTotals.cgst)}</strong></div>
 			<div><span>SGST ({invSgstRate} %)</span><strong>{formatINR(invoiceTotals.sgst)}</strong></div>
+			{#if invoiceAdjustment !== 0}<div><span>Total adjustment</span><strong>{formatINR(invoiceAdjustment)}</strong></div>{/if}
 			<div class="grand"><span>Grand Total</span><strong>{formatINR(invoiceTotals.grandTotal)}</strong></div>
 		</div>
+		<div class="invoice-payment-summary"><span>Received <strong>{formatINR(Number(invAmountPaid) || 0)}</strong></span><span>Balance due <strong>{formatINR(invoiceBalance)}</strong></span></div>
 		<p class="muted invoice-words">In words: {invoiceWords}</p>
+		<div class="invoice-output-actions"><button class="secondary" on:click={() => (invoicePreviewOpen = true)}><Icon name="search" size={18} />Preview invoice</button>
 		<button class="invoice-generate" on:click={generateInvoicePdf}>
 			<Icon name="bill" size={18} />
-			Generate PDF Invoice
-		</button>
+			Print / Save PDF
+		</button></div>
 	</div>
 	<p class="muted calculator-note">
 		Opens a print-ready invoice in a new tab — choose “Save as PDF” in the print dialog. Allow pop-ups if nothing opens.
 	</p>
 </section>
 
-<section class="panel">
+<section class="panel" id="front-desk-todos">
 	<div class="section-header">
 		<div>
 			<h2>To-Dos</h2>
@@ -907,7 +1038,7 @@
 	</div>
 </section>
 
-<section class="panel">
+<section class="panel" id="pending-bills">
 	<div class="section-header">
 		<div>
 			<h2>Pending Bills</h2>
@@ -1144,11 +1275,6 @@
 		text-align: center;
 	}
 
-	.saved-check {
-		color: var(--success);
-		font-weight: 800;
-	}
-
 	.saving-dot {
 		display: inline-block;
 		width: 8px;
@@ -1156,14 +1282,6 @@
 		border-radius: 50%;
 		background: var(--accent);
 		animation: pulse 1s infinite;
-	}
-
-	.empty-dot {
-		display: inline-block;
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--border-strong);
 	}
 
 	@keyframes pulse {

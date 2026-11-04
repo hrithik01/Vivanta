@@ -1,5 +1,6 @@
 <script>
 	// @ts-nocheck
+	import PageHeading from '$lib/components/PageHeading.svelte';
 	import { onMount } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
@@ -90,6 +91,8 @@
 		loading = false;
 	});
 </script>
+
+<PageHeading eyebrow="INSIGHTS & RECONCILIATION" title="Reports & settlement" description="Review your numbers, export statements, and settle partner accounts." />
 
 <section class="panel">
 	<div class="row report-header">

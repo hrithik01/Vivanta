@@ -10,13 +10,17 @@ export const validDues = (dues = []) =>
 		.filter((due) => PARTNERS[due.from] && PARTNERS[due.to] && due.from !== due.to && due.amount > 0);
 
 /**
- * pool = cash + account - hold + sum(paid); each partner is squared up to pool / n,
+ * Rent includes amounts received directly by partners. Remove those from available
+ * funds and credit them toward the recipients' payouts without adding them to the pool twice.
+ * pool = cash + account + restaurantRent - hold + sum(paid); each partner is squared up to pool / n,
  * then inter-partner dues move money from the debtor's payout to the creditor's.
- * @param {{ cash: number, account: number, hold: number, paid: number[], dues?: { from: number, to: number, amount: number, note?: string }[] }} input
+ * @param {{ cash: number, account: number, restaurantRent?: number, rentReceived?: number[], hold: number, paid: number[], dues?: { from: number, to: number, amount: number, note?: string }[] }} input
  */
-export const computeDistribution = ({ cash, account, hold, paid, dues = [] }) => {
-	const paidAmounts = PARTNERS.map((_, index) => round2(paid[index]));
-	const available = round2((Number(cash) || 0) + (Number(account) || 0) - (Number(hold) || 0));
+export const computeDistribution = ({ cash, account, restaurantRent = 0, rentReceived = [], hold, paid, dues = [] }) => {
+	const rentAmounts = PARTNERS.map((_, index) => round2(rentReceived[index]));
+	const rentReceivedTotal = round2(rentAmounts.reduce((sum, value) => sum + value, 0));
+	const paidAmounts = PARTNERS.map((_, index) => round2(round2(paid[index]) + rentAmounts[index]));
+	const available = round2((Number(cash) || 0) + (Number(account) || 0) + (Number(restaurantRent) || 0) - rentReceivedTotal - (Number(hold) || 0));
 	const paidTotal = round2(paidAmounts.reduce((sum, value) => sum + value, 0));
 	const pool = round2(available + paidTotal);
 	// Floor to the paisa so rounding never distributes more than is available.
@@ -29,10 +33,10 @@ export const computeDistribution = ({ cash, account, hold, paid, dues = [] }) =>
 		const adjustment = round2(
 			receives.reduce((sum, due) => sum + due.amount, 0) - owes.reduce((sum, due) => sum + due.amount, 0)
 		);
-		return { name, paid: paidAmounts[index], basePayout, adjustment, owes, receives, payout: round2(basePayout + adjustment) };
+		return { name, paid: paidAmounts[index], rentReceived: rentAmounts[index], basePayout, adjustment, owes, receives, payout: round2(basePayout + adjustment) };
 	});
 	const distributed = round2(partners.reduce((sum, partner) => sum + partner.payout, 0));
-	return { available, paidTotal, pool, share, partners, dues: appliedDues, distributed, remainder: round2(available - distributed) };
+	return { available, paidTotal, rentReceivedTotal, pool, share, partners, dues: appliedDues, distributed, remainder: round2(available - distributed) };
 };
 
 const inr = (value) =>
@@ -58,7 +62,7 @@ export const dateLabel = (value) =>
 	parseDate(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
 /**
- * @param {{ date: string, hotel?: string, cash: number, account: number, hold: number, holdRemarks: string, paid: number[], dues?: object[] }} input
+ * @param {{ date: string, hotel?: string, cash: number, account: number, restaurantRent?: number, rentReceived?: number[], hold: number, holdRemarks: string, paid: number[], dues?: object[] }} input
  */
 export const buildDistributionHtml = (input) => {
 	const result = computeDistribution(input);
@@ -186,6 +190,8 @@ export const buildDistributionHtml = (input) => {
 	<table>
 		<tr><td>Cash in hand</td><td class="num">${inr(input.cash)}</td></tr>
 		<tr><td>Account balance</td><td class="num">${inr(input.account)}</td></tr>
+		<tr><td>Restaurant Rent</td><td class="num">${inr(input.restaurantRent)}</td></tr>
+		${result.rentReceivedTotal ? `<tr><td>Restaurant rent already received by partners</td><td class="num minus">− ${inr(result.rentReceivedTotal)}</td></tr>` : ''}
 		<tr>
 			<td>Online payments on hold${input.holdRemarks ? `<div class="remarks">${escapeHtml(input.holdRemarks)}</div>` : ''}</td>
 			<td class="num minus">− ${inr(input.hold)}</td>
@@ -195,7 +201,7 @@ export const buildDistributionHtml = (input) => {
 
 	<h2>Payouts already taken this month</h2>
 	<table>
-		${result.partners.map((p) => `<tr><td>${escapeHtml(p.name)}</td><td class="num">${inr(p.paid)}</td></tr>`).join('')}
+		${result.partners.map((p) => `<tr><td>${escapeHtml(p.name)}${p.rentReceived ? `<div class="remarks">Includes ${inr(p.rentReceived)} restaurant rent received directly</div>` : ''}</td><td class="num">${inr(p.paid)}</td></tr>`).join('')}
 		<tr class="total"><td>Total paid out</td><td class="num">${inr(result.paidTotal)}</td></tr>
 	</table>
 

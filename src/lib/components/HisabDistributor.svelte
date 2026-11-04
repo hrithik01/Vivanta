@@ -16,6 +16,8 @@
 	let date = localToday();
 	let cash = '';
 	let account = '';
+	let restaurantRent = '';
+	let rentReceived = PARTNERS.map(() => '');
 	let hold = '';
 	let holdRemarks = '';
 	let paid = PARTNERS.map(() => '');
@@ -28,8 +30,9 @@
 		try {
 			const draft = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
 			if (draft && draft.month === date.slice(0, 7)) {
-				({ cash = '', account = '', hold = '', holdRemarks = '' } = draft);
+				({ cash = '', account = '', restaurantRent = '', hold = '', holdRemarks = '' } = draft);
 				if (Array.isArray(draft.paid)) paid = PARTNERS.map((_, i) => draft.paid[i] ?? '');
+				if (Array.isArray(draft.rentReceived)) rentReceived = PARTNERS.map((_, i) => draft.rentReceived[i] ?? '');
 				duesEnabled = Boolean(draft.duesEnabled);
 				if (Array.isArray(draft.dues) && draft.dues.length) dues = draft.dues;
 			}
@@ -43,7 +46,7 @@
 		try {
 			localStorage.setItem(
 				STORAGE_KEY,
-				JSON.stringify({ month: date.slice(0, 7), cash, account, hold, holdRemarks, paid, duesEnabled, dues })
+				JSON.stringify({ month: date.slice(0, 7), cash, account, restaurantRent, rentReceived, hold, holdRemarks, paid, duesEnabled, dues })
 			);
 		} catch {
 			/* storage unavailable */
@@ -51,7 +54,8 @@
 	}
 
 	$: activeDues = duesEnabled ? dues : [];
-	$: result = computeDistribution({ cash, account, hold, paid, dues: activeDues });
+	$: result = computeDistribution({ cash, account, restaurantRent, rentReceived, hold, paid, dues: activeDues });
+	$: rentExceeds = result.rentReceivedTotal > (Number(restaurantRent) || 0);
 
 	const addDue = () => {
 		dues = [...dues, newDue()];
@@ -65,19 +69,24 @@
 		const { from, to } = dues[index];
 		dues[index] = { ...dues[index], from: to, to: from };
 	};
-	$: hasInput = [cash, account, hold, ...paid].some((value) => value !== '' && value !== null);
+	$: hasInput = [cash, account, restaurantRent, hold, ...paid, ...rentReceived].some((value) => value !== '' && value !== null && value !== undefined);
 	$: holdExceeds = result.available < 0;
 	$: owing = result.partners.filter((partner) => partner.payout < 0);
 
 	const reset = () => {
-		cash = account = hold = holdRemarks = '';
+		cash = account = restaurantRent = hold = holdRemarks = '';
 		paid = PARTNERS.map(() => '');
+		rentReceived = PARTNERS.map(() => '');
 		duesEnabled = false;
 		dues = [newDue()];
 		toast.info('Hisab distributor cleared.');
 	};
 
 	const downloadPdf = () => {
+		if (rentExceeds) {
+			toast.warning('Restaurant rent already received cannot exceed the total restaurant rent.');
+			return;
+		}
 		if (!hasInput) {
 			toast.warning('Enter the balances before downloading the PDF.');
 			return;
@@ -87,6 +96,8 @@
 			hotel: $page.data.hotelName,
 			cash: Number(cash) || 0,
 			account: Number(account) || 0,
+			restaurantRent: Number(restaurantRent) || 0,
+			rentReceived: rentReceived.map((value) => Number(value) || 0),
 			hold: Number(hold) || 0,
 			holdRemarks: holdRemarks.trim(),
 			paid: paid.map((value) => Number(value) || 0),
@@ -132,6 +143,26 @@
 					<div class="money"><em>₹</em><input type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" bind:value={account} /></div>
 				</label>
 				<label>
+					<span>Restaurant Rent</span>
+					<div class="money"><em>₹</em><input type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" bind:value={restaurantRent} /></div>
+				</label>
+				<p class="muted small hint">Enter total rent for this split, including rent received directly by partners. Cash and account balances above should exclude this rent.</p>
+				<div class="rent-received">
+					<div class="group-title">Restaurant rent already received</div>
+					<p class="muted small hint">Optional: how much of the split has each partner received directly as rent? This reduces their payout now.</p>
+					<div class="paid-grid">
+						{#each PARTNERS as partner, index}
+							<label>
+								<span>{partner} rent received</span>
+								<div class="money"><em>₹</em><input type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" bind:value={rentReceived[index]} /></div>
+							</label>
+						{/each}
+					</div>
+					{#if rentExceeds}
+						<p class="small row-error">Total rent received cannot exceed Restaurant Rent.</p>
+					{/if}
+				</div>
+				<label>
 					<span>Online payments on hold</span>
 					<div class="money minus"><em>−₹</em><input type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" bind:value={hold} /></div>
 				</label>
@@ -147,6 +178,7 @@
 
 			<div class="card group">
 				<div class="group-title"><span class="step">2</span>Payouts already taken in {monthLabel(date)}</div>
+				<p class="muted small hint">Enter other payouts already taken. Restaurant rent received above is counted automatically; do not enter it again here.</p>
 				<div class="paid-grid">
 					{#each PARTNERS as partner, index}
 						<label>
@@ -235,6 +267,9 @@
 						<div class="partner-body">
 							<span class="partner-name">{partner.name}</span>
 							<span class="muted small">(already paid {formatINR(partner.paid)})</span>
+							{#if partner.rentReceived}
+								<span class="muted small">Includes {formatINR(partner.rentReceived)} rent received directly</span>
+							{/if}
 							{#if partner.owes.length || partner.receives.length}
 								<span class="muted small">Share payout {formatINR(partner.basePayout)}</span>
 								{#each partner.owes as due}
@@ -264,7 +299,7 @@
 			{#if holdExceeds}
 				<div class="notice danger">
 					<Icon name="warning" size={16} />
-					<span>Online hold is more than cash plus account balance, so there is nothing to distribute right now.</span>
+					<span>Funds remaining after rent already received and online hold are negative. Check the balances and received amounts.</span>
 				</div>
 			{:else if owing.length}
 				<div class="notice warn">
@@ -410,6 +445,14 @@
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 10px;
+	}
+
+	.rent-received {
+		display: grid;
+		gap: 10px;
+		padding: 12px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
 	}
 
 	.subtotal {

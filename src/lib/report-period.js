@@ -8,6 +8,21 @@ export function getMonthRange(year, month) {
  return { start: `${prefix}-01`, end: `${prefix}-${String(days).padStart(2, '0')}` };
 }
 
+/** Inclusive calendar months, or null for an invalid/reversed range.
+ * @param {string} startMonth @param {string} endMonth
+ */
+export function getComparisonMonths(startMonth, endMonth) {
+ if (!/^\d{4}-\d{2}$/.test(startMonth || '') || !/^\d{4}-\d{2}$/.test(endMonth || '')) return null;
+ const [startYear, startNumber] = startMonth.split('-').map(Number);
+ const [endYear, endNumber] = endMonth.split('-').map(Number);
+ if (!getMonthRange(startYear, startNumber) || !getMonthRange(endYear, endNumber) || startMonth > endMonth) return null;
+ const months = [];
+ for (let index = startYear * 12 + startNumber - 1; index <= endYear * 12 + endNumber - 1; index++) {
+  months.push(`${Math.floor(index / 12)}-${String(index % 12 + 1).padStart(2, '0')}`);
+ }
+ return months;
+}
+
 /** @param {string} value */
 export function isReportDate(value) {
  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;

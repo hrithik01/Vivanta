@@ -5,6 +5,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import HisabDistributor from '$lib/components/HisabDistributor.svelte';
+	import MonthlyPerformance from '$lib/components/MonthlyPerformance.svelte';
 	import { toast } from '$lib/stores/toast.js';
 	import { EXPENSE_PAYMENT_TYPES, formatExpensePaymentType } from '$lib/expense-payment.js';
 	import { formatINR, formatShortDate } from '$lib/ui-utils.js';
@@ -71,6 +72,7 @@
 	let report = null;
 	let loading = false;
 	let running = false;
+	let reportView = 'ledger';
 
 	const expensePaymentOptions = [
 		{ value: 'all', label: 'All' },
@@ -145,6 +147,14 @@
 
 <PageHeading eyebrow="INSIGHTS & RECONCILIATION" title="Reports & settlement" description="Review your numbers, export statements, and settle partner accounts." />
 
+<nav class="report-views" aria-label="Report type">
+    <button class:secondary={reportView !== 'ledger'} aria-pressed={reportView === 'ledger'} on:click={() => reportView = 'ledger'}>Ledger report</button>
+    <button class:secondary={reportView !== 'monthly'} aria-pressed={reportView === 'monthly'} on:click={() => reportView = 'monthly'}>Compare monthly performances</button>
+</nav>
+
+{#if reportView === 'monthly'}
+    <MonthlyPerformance />
+{:else}
 <section class="panel">
 	<div class="row report-header">
 		<div>
@@ -462,7 +472,10 @@
 	{/if}
 {/if}
 
+{/if}
+
 <style>
+    .report-views { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
     .report-export-actions, .report-period-options { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .report-period-options > span, .pdf-overview-hint { font-size: 11px; }
     .report-period-options .check-option { border-radius: 7px; padding: 9px 12px; }

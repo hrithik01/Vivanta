@@ -109,17 +109,12 @@
 	let invCgstOverride = '';
 	let invSgstOverride = '';
 	let invTotalOverride = '';
-	let invPaper = 'A4';
-    let invCustomerAddress = '';
-    let invCustomerState = '';
     let invCustomerPhone = '';
     let invPlaceOfSupply = '';
     let invSac = '996311';
-    let invReverseCharge = false;
     let invAmountPaid = '';
     let invPaymentMode = '';
     let invPaymentReference = '';
-    let invNotes = '';
     let invoicePreviewOpen = false;
 
 	$: invoiceProfile = getInvoiceProfile($page.data?.hotel, $page.data?.hotelName);
@@ -145,15 +140,91 @@
     $: invoiceDraft = {
         billNo: invBillNo.trim(), billDate: invBillDate,
         customerName: invCustomerName.trim(), companyName: invCompanyName.trim(), customerGstin: invCustomerGstin.trim(),
-        customerAddress: invCustomerAddress.trim(), customerState: invCustomerState.trim(), customerPhone: invCustomerPhone.trim(),
-        placeOfSupply: invPlaceOfSupply.trim() || invoiceProfile.state, sac: invSac.trim(), reverseCharge: invReverseCharge,
+        customerPhone: invCustomerPhone.trim(),
+        placeOfSupply: invPlaceOfSupply.trim() || invoiceProfile.state, sac: invSac.trim(),
         arrivalDate: invArrivalDate, arrivalTime: invArrivalTime, departureDate: invDepartureDate, departureTime: invDepartureTime,
         roomNo: invRoomNo.trim(), persons: invPersons, particulars: invParticulars.trim(), roomType: invRoomType.trim(),
         qty: invQty, unit: invUnit, rate: Number(invRate), cgstRate: Number(invCgstRate) || 0, sgstRate: Number(invSgstRate) || 0,
-        cgstOverride: invCgstOverride, sgstOverride: invSgstOverride, totalOverride: invTotalOverride, paper: invPaper,
-        amountPaid: Number(invAmountPaid) || 0, paymentMode: invPaymentMode, paymentReference: invPaymentReference.trim(), notes: invNotes.trim()
+        cgstOverride: invCgstOverride, sgstOverride: invSgstOverride, totalOverride: invTotalOverride, paper: 'A4',
+        amountPaid: Number(invAmountPaid) || 0, paymentMode: invPaymentMode, paymentReference: invPaymentReference.trim()
     };
     $: invoicePreviewHtml = invoicePreviewOpen ? buildInvoiceHtml({ ...invoiceDraft, preview: true }, invoiceProfile) : '';
+
+    let invoiceHistory = [];
+    let invoiceHistoryOpen = false;
+    let invoiceHistoryLoading = true;
+    let invoiceHistoryError = '';
+    let invoiceSaving = false;
+    let deletingInvoiceId = null;
+
+    const loadInvoiceHistory = async () => {
+        invoiceHistoryLoading = true;
+        invoiceHistoryError = '';
+        try {
+            const res = await fetch('/api/invoice-inputs');
+            if (!res.ok) throw new Error();
+            invoiceHistory = await res.json();
+        } catch {
+            invoiceHistoryError = 'Could not load previous inputs. Please retry.';
+        } finally { invoiceHistoryLoading = false; }
+    };
+
+    const saveInvoiceInputs = async (inputs) => {
+        invoiceSaving = true;
+        try {
+            const res = await fetch('/api/invoice-inputs', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inputs)
+            });
+            if (!res.ok) throw new Error();
+            await loadInvoiceHistory();
+            toast.success('Invoice inputs saved. Use previous inputs to reuse them.');
+        } catch {
+            toast.error('Invoice opened, but inputs could not be saved. Generate again to retry.');
+        } finally { invoiceSaving = false; }
+    };
+
+    const useInvoiceInputs = (entry) => {
+        invBillNo = entry.invoice.billNo ?? '';
+        invBillDate = entry.invoice.billDate ?? '';
+        invCustomerName = entry.invoice.customerName ?? '';
+        invCompanyName = entry.invoice.companyName ?? '';
+        invCustomerGstin = entry.invoice.customerGstin ?? '';
+        invCustomerPhone = entry.invoice.customerPhone ?? '';
+        invPlaceOfSupply = entry.invoice.placeOfSupply ?? '';
+        invSac = entry.invoice.sac ?? '';
+        invArrivalDate = entry.invoice.arrivalDate ?? '';
+        invArrivalTime = entry.invoice.arrivalTime ?? '';
+        invDepartureDate = entry.invoice.departureDate ?? '';
+        invDepartureTime = entry.invoice.departureTime ?? '';
+        invRoomNo = entry.invoice.roomNo ?? '';
+        invPersons = entry.invoice.persons ?? 0;
+        invParticulars = entry.invoice.particulars ?? '';
+        invRoomType = entry.invoice.roomType ?? '';
+        invUnit = entry.invoice.unit ?? '';
+        invRate = entry.invoice.rate ?? '';
+        invCgstRate = entry.invoice.cgstRate ?? 0;
+        invSgstRate = entry.invoice.sgstRate ?? 0;
+        invCgstOverride = entry.invoice.cgstOverride ?? '';
+        invSgstOverride = entry.invoice.sgstOverride ?? '';
+        invTotalOverride = entry.invoice.totalOverride ?? '';
+        invAmountPaid = entry.invoice.amountPaid ?? '';
+        invPaymentMode = entry.invoice.paymentMode ?? '';
+        invPaymentReference = entry.invoice.paymentReference ?? '';
+        invoiceProfile = { ...invoiceProfile, ...entry.profile };
+        invoiceHistoryOpen = false;
+        toast.success('Previous inputs filled. Review the invoice number and dates before generating.');
+    };
+
+    const deleteInvoiceInputs = async (id) => {
+        deletingInvoiceId = id;
+        try {
+            const res = await fetch(`/api/invoice-inputs/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error();
+            invoiceHistory = invoiceHistory.filter((entry) => entry.id !== id);
+            toast.success('Previous inputs deleted.');
+        } catch { toast.error('Could not delete these inputs. Please retry.'); }
+        finally { deletingInvoiceId = null; }
+    };
 
 	const scrollToGstInvoice = () => {
 		document.getElementById('gst-invoice-generator')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -187,9 +258,9 @@
 		invCgstOverride = '';
 		invSgstOverride = '';
 		invTotalOverride = '';
-        invCustomerAddress = ''; invCustomerState = ''; invCustomerPhone = '';
-        invPlaceOfSupply = ''; invSac = '996311'; invReverseCharge = false;
-        invAmountPaid = ''; invPaymentMode = ''; invPaymentReference = ''; invNotes = '';
+        invCustomerPhone = '';
+        invPlaceOfSupply = ''; invSac = '996311';
+        invAmountPaid = ''; invPaymentMode = ''; invPaymentReference = '';
 	};
 
 	const generateInvoicePdf = () => {
@@ -200,7 +271,6 @@
         if (!invBillDate) issues.push('Enter the invoice date.');
         if (!invCustomerName.trim()) issues.push('Enter the customer name.');
         if (invCustomerGstin && !gstinPattern.test(invCustomerGstin.trim())) issues.push('Enter a valid 15-character customer GSTIN or leave it blank.');
-        if ((invCustomerGstin || invoiceTotals.grandTotal >= 50000) && (!invCustomerAddress.trim() || !invCustomerState.trim())) issues.push('Enter the customer billing address and state / code.');
         if (!/^\d{4,8}$/.test(invSac.trim())) issues.push('Enter the applicable 4–8 digit SAC service code.');
         if (!(invPlaceOfSupply.trim() || invoiceProfile.state)) issues.push('Enter the place of supply and state code.');
         if (!invStay.valid || !(invQty > 0)) issues.push('Check the arrival and departure dates.');
@@ -214,7 +284,11 @@
             if (value !== '' && value != null && (!Number.isFinite(Number(value)) || Number(value) < 0)) issues.push(`${label} must be zero or greater.`);
         }
         if (issues.length) { toast.error(issues[0]); return; }
-        if (!openInvoicePrint(invoiceDraft, invoiceProfile)) toast.error('Allow pop-ups for this site to generate the invoice.');
+        if (!openInvoicePrint(invoiceDraft, invoiceProfile)) {
+            toast.error('Allow pop-ups for this site to generate the invoice.');
+            return;
+        }
+        saveInvoiceInputs({ invoice: { ...invoiceDraft }, profile: { ...invoiceProfile } });
     };
 
 	const loadSummary = async () => {
@@ -265,7 +339,7 @@
 
 	onMount(async () => {
 		loading = true;
-		await Promise.all([loadSummary(), loadRoomSummary(), loadBoards()]);
+		await Promise.all([loadSummary(), loadRoomSummary(), loadBoards(), loadInvoiceHistory()]);
 		loading = false;
 	});
 
@@ -772,10 +846,11 @@
 		<div>
 			<h2>GST tax invoice</h2>
 			<p class="muted">
-				Create a clear, itemized hotel bill. Preview the invoice, then print or save it as PDF.
+				Create a single-page A4 hotel bill. Preview the invoice, then print or save it as PDF.
 			</p>
 		</div>
 		<div class="invoice-actions">
+            <button class="ghost" aria-expanded={invoiceHistoryOpen} on:click={() => (invoiceHistoryOpen = !invoiceHistoryOpen)}>Use previous inputs</button>
 			<button class="ghost" on:click={prefillInvoiceFromCalculator} title="Copy dates and tariff from the Days Calculator">
 				<Icon name="calculator" size={18} />
 				Prefill from calculator
@@ -787,6 +862,24 @@
 		</div>
 	</div>
 
+    {#if invoiceHistoryOpen}
+        <div class="invoice-history">
+            <h3>Previous invoice inputs</h3>
+            <p class="muted">Saved for this hotel. Only inputs are stored; PDFs are not saved.</p>
+            {#if invoiceHistoryLoading}<p role="status">Loading previous inputs…</p>
+            {:else if invoiceHistoryError}<p role="alert">{invoiceHistoryError}</p><button on:click={loadInvoiceHistory}>Retry</button>
+            {:else if !invoiceHistory.length}<p>No previous inputs yet. Generate an invoice to save its inputs.</p>
+            {:else}
+                <ul>
+                    {#each invoiceHistory as entry (entry.id)}
+                        <li><div><strong>{entry.invoice.billNo} · {entry.invoice.customerName}</strong><p class="muted">{entry.invoice.billDate} · Room {entry.invoice.roomNo || '—'}</p></div>
+                        <div class="invoice-actions"><button on:click={() => useInvoiceInputs(entry)}>Use inputs</button><button class="ghost" disabled={deletingInvoiceId === entry.id} aria-label={`Delete inputs for ${entry.invoice.billNo}`} on:click={() => deleteInvoiceInputs(entry.id)}>{deletingInvoiceId === entry.id ? 'Deleting…' : 'Delete'}</button></div></li>
+                    {/each}
+                </ul>
+            {/if}
+        </div>
+    {/if}
+
     <details class="invoice-letterhead">
         <summary><Icon name="hotel" size={16} />Hotel letterhead <span>{invoiceProfile.name} · {invoiceProfile.gstin || 'Add GSTIN'}</span></summary>
         <div class="invoice-grid">
@@ -796,7 +889,7 @@
             <label><span>Contact numbers</span><input bind:value={invoiceProfile.phones} /></label>
             <label><span>Signatory / legal business name</span><input bind:value={invoiceProfile.signatoryFor} /></label>
         </div>
-        <p class="field-hint">Letterhead edits apply to this invoice session.</p>
+        <p class="field-hint">Letterhead edits are saved with generated inputs.</p>
     </details>
 	<h3 class="invoice-subhead">Bill &amp; Customer</h3>
 	<div class="invoice-grid">
@@ -830,8 +923,6 @@
 	</div>
 
     <div class="invoice-grid">
-        <label class="span-2"><span>Billing address</span><input placeholder="Street, city, postal code" bind:value={invCustomerAddress} /></label>
-        <label><span>Customer state / code</span><input placeholder="e.g. Rajasthan (08)" bind:value={invCustomerState} /></label>
         <label><span>Customer phone (optional)</span><input type="tel" bind:value={invCustomerPhone} /></label>
     </div>
 
@@ -900,13 +991,6 @@
 			<input type="number" min="0" step="1" placeholder="e.g. 1349" bind:value={invRate} />
 		</label>
 		<label>
-			<span>Paper Size</span>
-			<select bind:value={invPaper}>
-				<option value="A5">A5 (bill book size)</option>
-				<option value="A4">A4</option>
-			</select>
-		</label>
-		<label>
 			<span>CGST %</span>
 			<input type="number" min="0" step="0.5" bind:value={invCgstRate} />
 		</label>
@@ -918,7 +1002,6 @@
     <div class="invoice-grid">
         <label><span>SAC / service code *</span><input inputmode="numeric" maxlength="8" placeholder="Applicable accommodation SAC" bind:value={invSac} /></label>
         <label><span>Place of supply / state code *</span><input placeholder={invoiceProfile.state || 'State name and code'} bind:value={invPlaceOfSupply} /></label>
-        <label><span>Reverse charge</span><select bind:value={invReverseCharge}><option value={false}>No</option><option value={true}>Yes</option></select></label>
     </div>
     <p class="field-hint invoice-rate-note">CGST and SGST rates are editable. Use the rates applicable to this stay.</p>
     <details class="invoice-adjustments"><summary>Manual tax &amp; total adjustments</summary><div class="invoice-grid">
@@ -936,12 +1019,11 @@
 		</label>
 	</div>
     </details>
-    <h3 class="invoice-subhead">Payment &amp; notes</h3>
+    <h3 class="invoice-subhead">Payment</h3>
     <div class="invoice-grid">
         <label><span>Amount received (INR)</span><input type="number" min="0" step="0.01" placeholder="0.00" bind:value={invAmountPaid} /></label>
         <label><span>Payment mode</span><select bind:value={invPaymentMode}><option value="">Not specified</option><option>Cash</option><option>UPI</option><option>Card</option><option>Bank transfer</option><option>Mixed</option></select></label>
         <label><span>Payment reference (optional)</span><input placeholder="Receipt / transaction reference" bind:value={invPaymentReference} /></label>
-        <label class="wide"><span>Invoice notes (optional)</span><textarea rows="2" placeholder="Guest requests or additional billing notes" bind:value={invNotes}></textarea></label>
     </div>
 
 	<div class="invoice-summary">
@@ -955,7 +1037,7 @@
 		<div class="invoice-payment-summary"><span>Received <strong>{formatINR(Number(invAmountPaid) || 0)}</strong></span><span>Balance due <strong>{formatINR(invoiceBalance)}</strong></span></div>
 		<p class="muted invoice-words">In words: {invoiceWords}</p>
 		<div class="invoice-output-actions"><button class="secondary" on:click={() => (invoicePreviewOpen = true)}><Icon name="search" size={18} />Preview invoice</button>
-		<button class="invoice-generate" on:click={generateInvoicePdf}>
+		<button class="invoice-generate" disabled={invoiceSaving} on:click={generateInvoicePdf}>
 			<Icon name="bill" size={18} />
 			Print / Save PDF
 		</button></div>
@@ -1370,6 +1452,10 @@
 		font-size: 0.85rem;
 	}
 
+    .invoice-history { margin: 16px 0; padding: 16px; border: 1px solid var(--border); border-radius: 8px; }
+    .invoice-history ul { list-style: none; padding: 0; max-height: 320px; overflow-y: auto; }
+    .invoice-history li { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }
+    .invoice-history li p { margin: 4px 0 0; }
 	.invoice-actions {
 		display: flex;
 		gap: 0.5rem;

@@ -10,7 +10,7 @@
 <div class="invoice-preview-backdrop" role="presentation" on:click={(event) => event.target === event.currentTarget && close()}>
  <dialog open aria-modal="true" aria-labelledby="invoice-preview-title" class="invoice-preview-modal" use:modalFocus={close}>
   <header><div><h2 id="invoice-preview-title">Invoice preview</h2><p class="muted">Review the bill before printing or saving as PDF.</p></div><div class="preview-actions"><button on:click={() => dispatch('print')}><Icon name="bill" size={16} />Print / Save PDF</button><button class="ghost" aria-label="Close invoice preview" on:click={close}><Icon name="close" size={18} /></button></div></header>
-  <iframe title="Tax invoice preview" srcdoc={html} sandbox=""></iframe>
+  <iframe title="Tax invoice preview" srcdoc={html} sandbox="allow-scripts"></iframe>
  </dialog>
 </div>
 

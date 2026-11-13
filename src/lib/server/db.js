@@ -11,6 +11,12 @@ if (!fs.existsSync(dataDir)) {
 }
 
 const schema = `
+CREATE TABLE IF NOT EXISTS invoice_inputs (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ inputs_json TEXT NOT NULL UNIQUE,
+ created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS rooms (
 	room_number TEXT PRIMARY KEY
 );

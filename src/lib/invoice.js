@@ -258,8 +258,8 @@ export const computeInvoiceTotals = ({
  */
 export const buildInvoiceHtml = (invoice, profile = FALLBACK_PROFILE) => {
  const totals = computeInvoiceTotals(invoice);
- const paper = invoice.paper === 'A4' ? 'A4' : 'A5';
- const compact = paper === 'A5';
+ const paper = 'A4';
+ const compact = false;
  const paid = Math.max(0, Number(invoice.amountPaid) || 0);
  const balance = Math.max(0, Math.round((totals.grandTotal - paid) * 100) / 100);
  const credit = Math.max(0, Math.round((paid - totals.grandTotal) * 100) / 100);
@@ -278,13 +278,15 @@ export const buildInvoiceHtml = (invoice, profile = FALLBACK_PROFILE) => {
  html, body { margin: 0; padding: 0; }
  body { background: #edf1f5; color: #263346; font-family: Arial, 'Helvetica Neue', sans-serif; font-size: ${compact ? '8' : '9'}pt; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
  .sheet { width: ${compact ? '148mm' : '210mm'}; max-width: calc(100% - 24px); margin: 24px auto; background: white; padding: ${compact ? '8mm' : '13mm'}; box-shadow: 0 5px 30px #1a29421a; }
- .letterhead { display: flex; gap: 15px; align-items: flex-start; padding-bottom: 20px; border-bottom: 3px solid #193e42; }
+ .sheet { height: 297mm; overflow: hidden; }
+ .page-content { transform-origin: top left; }
+ .letterhead { display: flex; gap: 15px; align-items: flex-start; padding-bottom: 14px; border-bottom: 3px solid #193e42; }
  .monogram { flex: 0 0 auto; width: ${compact ? '36' : '48'}px; height: ${compact ? '40' : '52'}px; display: flex; justify-content: center; align-items: center; background: #193e42; color: #fff; font-family: Georgia, serif; font-size: ${compact ? '25' : '33'}px; font-weight: bold; }
  .supplier { flex: 1; min-width: 0; }
  h1 { font-size: ${compact ? '15' : '20'}pt; line-height: 1.15; letter-spacing: .5px; margin: 0 0 7px; color: #193e42; }
  .supplier p { margin: 2px 0; font-size: ${compact ? '7' : '8'}pt; color: #59687a; overflow-wrap: anywhere; }
  .supplier .gstin { margin-top: 7px; font-weight: 700; color: #263346; letter-spacing: .5px; }
- .invoice-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin: 22px 0; }
+ .invoice-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin: 16px 0; }
  .eyebrow { text-transform: uppercase; letter-spacing: 1.6px; font-size: 6.5pt; color: #6a7988; margin: 0 0 5px; }
  h2 { font-size: ${compact ? '18' : '25'}pt; color: #172d3b; font-weight: 700; line-height: 1.1; margin: 0; letter-spacing: -1px; }
  .copy { display: inline-block; border: 1px solid #dbe3e7; color: #637381; padding: 3px 6px; font-size: 6pt; margin-top: 8px; letter-spacing: .5px; }
@@ -322,8 +324,7 @@ export const buildInvoiceHtml = (invoice, profile = FALLBACK_PROFILE) => {
  .words { padding: 11px 13px; border: 1px solid #e0e9e9; background: #f7f9fa; }
  .words span { display: block; text-transform: uppercase; letter-spacing: 1px; font-size: 6pt; color: #73838f; margin-bottom: 4px; }
  .words strong { font-size: ${compact ? '7.5' : '9'}pt; }
- .notes { margin-top: 15px; white-space: pre-line; overflow-wrap: anywhere; font-size: 7pt; color: #637381; }
- .signatures { display: flex; justify-content: space-between; gap: 18px; margin-top: 25px; break-inside: avoid; }
+ .signatures { display: flex; justify-content: space-between; gap: 18px; margin-top: 18px; break-inside: avoid; }
  .signature { width: 45%; font-size: 7pt; }
  .signature:last-child { text-align: right; }
  .signature strong { display: block; color: #263e48; min-height: 24px; }
@@ -341,32 +342,45 @@ export const buildInvoiceHtml = (invoice, profile = FALLBACK_PROFILE) => {
  .compact .summary-grid { gap: 14px; margin: 11px 0; }
  .compact .total-row { padding: 3px 0; }
  .compact .total-row.grand { padding: 8px; }
- .compact .notes { margin-top: 10px; font-size: 6.5pt; }
  .compact .signatures { margin-top: 16px; }
  .compact .signature span { margin-top: 20px; }
  .compact .footer { margin-top: 12px; }
  @media screen and (max-width: 580px) { .sheet { padding: 16px; } .letterhead { gap: 10px; } h1 { font-size: 15pt; } .billing-grid, .summary-grid { gap: 12px; } .number { white-space: normal; } }
  @media print {
   html, body { background: white; }
-  .sheet { width: 100%; max-width: none; margin: 0; padding: 0; box-shadow: none; }
+  .sheet { width: 100%; max-width: none; margin: 0; padding: 0; height: 270mm; box-shadow: none; break-inside: avoid; }
   .print-toolbar { display: none; }
   .letterhead, .invoice-heading, .billing-grid, .stay, tr, .summary-grid, .words { break-inside: avoid; }
   thead { display: table-header-group; }
  }
 </style></head><body class="${compact ? 'compact' : 'standard'}">
 ${invoice.preview ? '' : '<div class="print-toolbar"><button onclick="window.print()">Print / Save as PDF</button><p>For a clean invoice, turn off browser headers and footers in print settings.</p></div>'}
-<article class="sheet">
+<article class="sheet"><div class="page-content">
  <header class="letterhead"><div class="monogram">${e(profile.logoLetter || profile.name?.slice(0, 1) || 'H')}</div><div class="supplier"><h1>${e(profile.name)}</h1><p>${e(profile.address)}</p>${profile.phones ? `<p>Contact: ${e(profile.phones)}</p>` : ''}<p class="gstin">GSTIN ${e(profile.gstin || '—')}</p></div></header>
  <div class="invoice-heading"><div><p class="eyebrow">Hotel accommodation</p><h2>TAX INVOICE</h2><span class="copy">ORIGINAL FOR RECIPIENT</span></div><div class="invoice-meta"><span>Invoice number</span><strong>${e(invoice.billNo || 'DRAFT')}</strong><p><span>Invoice date</span>${e(printDate(invoice.billDate))}</p></div></div>
- <section class="billing-grid"><div class="billing"><h3>Bill to</h3><p class="customer-name">${e(invoice.customerName || 'Guest name')}</p>${invoice.companyName ? `<p><strong>${e(invoice.companyName)}</strong></p>` : ''}${invoice.customerAddress ? `<p class="address">${e(invoice.customerAddress)}</p>` : ''}${invoice.customerState ? `<p>${e(invoice.customerState)}</p>` : ''}${invoice.customerPhone ? `<p>Contact: ${e(invoice.customerPhone)}</p>` : ''}<p>GSTIN: <strong>${e(invoice.customerGstin || 'Unregistered')}</strong></p></div><div class="tax-details">${field('Place of supply', state)}${field('SAC / Service code', invoice.sac)}${field('Reverse charge', invoice.reverseCharge ? 'Yes' : 'No')}${field('Currency', 'INR · Indian rupee')}</div></section>
+ <section class="billing-grid"><div class="billing"><h3>Bill to</h3><p class="customer-name">${e(invoice.customerName || 'Guest name')}</p>${invoice.companyName ? `<p><strong>${e(invoice.companyName)}</strong></p>` : ''}${invoice.customerPhone ? `<p>Contact: ${e(invoice.customerPhone)}</p>` : ''}<p>GSTIN: <strong>${e(invoice.customerGstin || 'Unregistered')}</strong></p></div><div class="tax-details">${field('Place of supply', state)}${field('SAC / Service code', invoice.sac)}${field('Currency', 'INR · Indian rupee')}</div></section>
  <section class="stay">${field('Check-in', `${printDate(invoice.arrivalDate)} · ${printTime(invoice.arrivalTime)}`)}${field('Check-out', `${printDate(invoice.departureDate)} · ${printTime(invoice.departureTime)}`)}${field('Room', invoice.roomNo)}${field('Guests', String(invoice.persons || 1))}</section>
  <table><thead><tr><th class="description">Description of service</th><th class="sac">SAC</th><th class="qty number">Qty</th><th class="rate number">Rate (₹)</th><th class="amount number">Taxable (₹)</th></tr></thead><tbody><tr><td><strong>${e(invoice.particulars || 'Room Tariff')}</strong>${invoice.roomType ? `<small>${e(invoice.roomType)}</small>` : ''}<small>${e(invoice.qty)} ${e(invoice.unit || 'Days')}</small></td><td>${e(invoice.sac || '—')}</td><td class="number">${e(invoice.qty)}</td><td class="number">${money(invoice.rate)}</td><td class="number"><strong>${money(totals.subTotal)}</strong></td></tr></tbody></table>
  <section class="summary-grid"><div class="payment"><h3>Payment details</h3><div class="status ${balance > 0 ? 'due' : ''}">${balance > 0 ? (paid > 0 ? 'PARTIALLY PAID' : 'PAYMENT DUE') : 'PAID'}</div>${field('Payment mode', invoice.paymentMode || 'Not specified')}${invoice.paymentReference ? `<p>Reference: ${e(invoice.paymentReference)}</p>` : ''}${credit > 0 ? `<p>Excess received / credit: <strong>${currency(credit)}</strong></p>` : ''}</div><div class="totals">${taxRow('Taxable value', totals.subTotal)}${taxRow(`CGST (${printRate(invoice.cgstRate ?? 2.5)}%)`, totals.cgst)}${taxRow(`SGST (${printRate(invoice.sgstRate ?? 2.5)}%)`, totals.sgst)}${adjustment ? taxRow('Total adjustment', adjustment) : ''}${taxRow('Grand total', totals.grandTotal, 'grand')}${taxRow('Amount received', paid)}${taxRow('Balance due', balance, 'balance')}</div></section>
  <div class="words"><span>Invoice amount in words</span><strong>Rupees ${e(amountInWords(totals.grandTotal))}</strong></div>
- ${invoice.notes || profile.stayNote ? `<div class="notes"><h3>Notes &amp; terms</h3>${e(invoice.notes || '')}${invoice.notes && profile.stayNote ? '<br />' : ''}${e(profile.stayNote || '')}</div>` : ''}
  <div class="signatures"><div class="signature"><strong>Guest acknowledgement</strong><span>Guest signature</span></div><div class="signature"><strong>For ${e(profile.signatoryFor || profile.name)}</strong><span>Authorized signatory</span></div></div>
  <footer class="footer"><strong>Thank you for staying with us.</strong><span>${profile.jurisdiction ? `Subject to ${e(profile.jurisdiction)} jurisdiction.` : e(profile.name)}</span></footer>
-</article></body></html>`;
+</div></article>
+<script>
+ function fitInvoice() {
+  const sheet = document.querySelector('.sheet');
+  const content = document.querySelector('.page-content');
+  content.style.transform = '';
+  const style = getComputedStyle(sheet);
+  const available = sheet.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+  const scale = Math.min(1, available / Math.max(content.scrollHeight, content.getBoundingClientRect().height));
+  content.style.transform = 'scale(' + scale + ')';
+ }
+ window.addEventListener('beforeprint', fitInvoice);
+ window.addEventListener('resize', fitInvoice);
+ document.fonts.ready.then(fitInvoice);
+ fitInvoice();
+</script></body></html>`;
 };
 
 /**
@@ -381,12 +395,12 @@ export const openInvoicePrint = (invoice, profile) => {
 	win.document.write(html);
 	win.document.close();
 	win.focus();
-	setTimeout(() => {
+	win.document.fonts.ready.then(() => setTimeout(() => {
 		try {
 			win.print();
 		} catch {
 			/* user can use the on-page button */
 		}
-	}, 400);
+	}, 100));
 	return true;
 };

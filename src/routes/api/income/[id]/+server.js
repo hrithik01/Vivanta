@@ -1,6 +1,7 @@
 // @ts-nocheck
 import db from '$lib/server/db.js';
 import { json } from '@sveltejs/kit';
+import { MMT_ROOM, MMT_INCOME_REFERENCE } from '$lib/income-defaults.js';
 
 export const PUT = async ({ params, request }) => {
 	const { id } = params;
@@ -9,12 +10,13 @@ export const PUT = async ({ params, request }) => {
 	if (!numericAmount || numericAmount <= 0) {
 		return json({ error: 'Amount must be greater than zero.' }, { status: 400 });
 	}
-	const referenceExists = income_reference && db.prepare('SELECT 1 FROM income_types WHERE name = ?').get(income_reference);
+	const roomValue = room_number ? String(room_number).trim() : '';
+	const referenceExists = (roomValue === MMT_ROOM && income_reference === MMT_INCOME_REFERENCE)
+		|| (income_reference && db.prepare('SELECT 1 FROM income_types WHERE name = ?').get(income_reference));
 	if (!referenceExists) return json({ error: 'Income reference is required.' }, { status: 400 });
 	if (!date) {
 		return json({ error: 'Date is required.' }, { status: 400 });
 	}
-	const roomValue = room_number ? String(room_number).trim() : '';
 	const groupValue = group_booking ? String(group_booking).trim() : '';
 	if (!roomValue && !groupValue) {
 		return json({ error: 'Room number or group booking is required.' }, { status: 400 });

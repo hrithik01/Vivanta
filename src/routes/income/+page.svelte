@@ -7,6 +7,7 @@
 	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 	import { toast } from '$lib/stores/toast.js';
 	import { formatINR, formatShortDate, formatDateInput } from '$lib/ui-utils.js';
+	import { MMT_ROOM, MMT_INCOME_REFERENCE } from '$lib/income-defaults.js';
 
 	const today = new Date().toISOString().slice(0, 10);
 	let selectedDate = today;
@@ -22,6 +23,9 @@
 	let selectedRangeValue = '14d';
 	let rooms = [];
 	let incomeTypes = [];
+	$: mmtReference = incomeTypes.find((type) => type.name.toLowerCase() === MMT_INCOME_REFERENCE.toLowerCase())?.name
+		?? MMT_INCOME_REFERENCE;
+	$: hasMmtReference = incomeTypes.some((type) => type.name === mmtReference);
 	let incomeList = [];
 	let editAmounts = {};
 	let editNotes = {};
@@ -85,6 +89,36 @@
 		}
 	};
 
+	const getRoomDefaults = (room, previousRoom, reference, notes) => {
+		if (room === MMT_ROOM) {
+			if (!/\bMMT\b/i.test(notes)) notes = notes.trim() ? `MMT: ${notes}` : MMT_ROOM;
+			return { reference: mmtReference, notes };
+		}
+		if (previousRoom === MMT_ROOM) {
+			const standardReferences = incomeTypes.filter((type) => type.name !== mmtReference);
+			if (reference === mmtReference) {
+				reference = standardReferences.find((type) => type.name === 'Room tariff')?.name
+					?? standardReferences[0]?.name ?? '';
+			}
+			if (notes === MMT_ROOM) notes = '';
+		}
+		return { reference, notes };
+	};
+
+	const changeFormRoom = (event) => {
+		const room = event.currentTarget.value;
+		const { reference, notes } = getRoomDefaults(room, form.room_number, form.income_reference, form.notes);
+		form = { ...form, room_number: room, income_reference: reference, notes };
+	};
+
+	const changeEditRoom = (id, event) => {
+		const room = event.currentTarget.value;
+		const { reference, notes } = getRoomDefaults(room, editRooms[id], editReferences[id], editNotes[id]);
+		editRooms[id] = room;
+		editReferences[id] = reference;
+		editNotes[id] = notes;
+	};
+
 	const loadIncome = async () => {
 		const selectedRange =
 			dateRangeOptions.find((option) => option.value === selectedRangeValue) || dateRangeOptions[1];
@@ -125,13 +159,16 @@
 
 	const applyIncomeDefaults = (income) => {
 		if (!income) return;
+		const { reference, notes } = getRoomDefaults(
+			income.room_number, '', income.income_reference || incomeTypes[0]?.name || 'Room tariff', ''
+		);
 		form = {
 			room_number: income.room_number || '',
 			group_booking: '',
-			income_reference: income.income_reference || incomeTypes[0]?.name || 'Room tariff',
+			income_reference: reference,
 			amount: '',
 			income_type: income.income_type || 'cash',
-			notes: ''
+			notes
 		};
 	};
 
@@ -305,7 +342,7 @@
 	<div class="form-grid">
 		<label>
 			<span>Room Number</span>
-			<select bind:value={form.room_number}>
+			<select value={form.room_number} on:change={changeFormRoom}>
 				<option value="">Select room (optional)</option>
 				{#each rooms as room}
 					<option value={room.room_number}>{room.room_number}</option>
@@ -319,6 +356,9 @@
 		<label>
 			<span>Income Reference</span>
 			<select bind:value={form.income_reference}>
+				{#if form.room_number === MMT_ROOM && !hasMmtReference}
+					<option value={mmtReference}>{mmtReference}</option>
+				{/if}
 				{#each incomeTypes as type}
 					<option value={type.name}>{type.name === 'Miscelleanous' ? 'Miscellaneous' : type.name}</option>
 				{/each}
@@ -428,7 +468,7 @@
 					{#if showGroupBooking || editingId !== null}
 						<col />
 					{/if}
-					{#if showReference}
+				{#if showReference || editingId !== null}
 						<col />
 					{/if}
 					<col />
@@ -445,7 +485,7 @@
 						{#if showGroupBooking || editingId !== null}
 							<th>Group Booking</th>
 						{/if}
-						{#if showReference}
+					{#if showReference || editingId !== null}
 							<th>Reference</th>
 						{/if}
 						<th>Type</th>
@@ -462,7 +502,7 @@
 							<td
 								colspan={
 									6 +
-									(showReference ? 1 : 0) +
+										((showReference || editingId !== null) ? 1 : 0) +
 									((showGroupBooking || editingId !== null) ? 1 : 0) +
 									(showActions ? 1 : 0)
 								}
@@ -482,7 +522,7 @@
 								</td>
 								<td>
 									{#if editingId === income.id}
-										<select bind:value={editRooms[income.id]}>
+										<select value={editRooms[income.id]} on:change={(event) => changeEditRoom(income.id, event)}>
 											<option value="">Select room</option>
 											{#each rooms as room}
 												<option value={room.room_number}>{room.room_number}</option>
@@ -501,13 +541,16 @@
 										{/if}
 									</td>
 								{/if}
-								{#if showReference}
+								{#if showReference || editingId !== null}
 									<td>
 										{#if editingId === income.id}
-							<select bind:value={editReferences[income.id]}>
-								{#each incomeTypes as type}
-									<option value={type.name}>{type.name === 'Miscelleanous' ? 'Miscellaneous' : type.name}</option>
-								{/each}
+									<select bind:value={editReferences[income.id]}>
+										{#if editRooms[income.id] === MMT_ROOM && !hasMmtReference}
+											<option value={mmtReference}>{mmtReference}</option>
+										{/if}
+										{#each incomeTypes as type}
+											<option value={type.name}>{type.name === 'Miscelleanous' ? 'Miscellaneous' : type.name}</option>
+										{/each}
 											</select>
 										{:else}
 											{income.income_reference || '-'}
